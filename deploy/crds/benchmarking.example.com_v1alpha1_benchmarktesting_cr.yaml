@@ -1,0 +1,26 @@
+apiVersion: benchmarking.example.com/v1alpha1
+kind: BenchmarkTesting
+metadata:
+  name: example-benchmarktesting2
+spec:
+  storageClass: freenas-sc
+  controlOpUnits:
+    - type: snapshot
+      interval: 60
+      snapshotOpArgs:
+        snapshotClass: csi-cstor-snapshotclass
+        target: freenas-claim1
+    #- type: provision
+    #  interval: 5
+    #  provisionOpArgs:
+    #    size: 5Gi
+  ioOpUnits:
+    - image: benchmarking/fio:3.19
+      pvcName: freenas-claim1
+      workingDir: /var/data/
+      outputDir: /output/
+      configName: test-config
+      outputParser: test-parser
+      appCmdline: fio $CONFIG_FILE --output-format=json+ --output=/output/out
+      parserImage: python:3.8-buster
+      parserCmdline: ./test_parser.py out
