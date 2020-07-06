@@ -7,9 +7,7 @@ import (
 	"strconv"
 	"net/http"
 	"bytes"
-	"io"
 	"io/ioutil"
-	"encoding/json"
 
 	"github.com/cnsbench/pkg/rates"
 
@@ -164,6 +162,9 @@ func (r *ReconcileBenchmark) cleanup(instance *cnsbenchv1alpha1.Benchmark) error
 	}
 	log.Info("Done Deleting", "finalizers", instance.GetFinalizers())
 
+	r.state[instance.ObjectMeta.Name].StopAfterName = ""
+	r.state[instance.ObjectMeta.Name].StopAfterKind = ""
+
 	return nil
 }
 
@@ -301,6 +302,7 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 				return reconcile.Result{}, err
 			}
 			delete(r.state, instance.ObjectMeta.Name)
+			log.Info("Deleted from r.state", "", instance.ObjectMeta.Name)
 		}
 		return reconcile.Result{}, nil
 	}
@@ -382,7 +384,7 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 }
 
 func (r *ReconcileBenchmark) sendToES(buf bytes.Buffer, url string) error {
-	req, err := http.NewRequest("POST", url+"/_doc/", buf)
+	req, err := http.NewRequest("POST", url+"/_doc/", &buf)
 	if err != nil {
 		return err
 	}
@@ -415,7 +417,7 @@ func (r *ReconcileBenchmark) doScale(name string, rateCh chan int, controlCh cha
 
 				err := r.client.Get(context.TODO(), targetName, target)
 				if err != nil {
-					log.Error(err, "Error getting Deployment", target)
+					log.Error(err, "Error getting Deployment", "targetname", target)
 				} else {
 					replicas := int32(n)
 					target.Spec.Replicas = &replicas
