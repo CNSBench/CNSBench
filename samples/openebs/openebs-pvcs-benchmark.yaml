@@ -1,0 +1,10 @@
+apiVersion: cnsbench.example.com/v1alpha1
+kind: Benchmark
+metadata:
+  name: openenbs-pvc-benchmark
+spec:
+  runtime: 120
+  actions:
+    - runOnceSpec:
+        specName: openebs-pvcs
+        count: 10

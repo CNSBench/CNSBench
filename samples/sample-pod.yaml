@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: sample-pod
+  namespace: default
+spec:
+  containers:
+  - name: sample
+    image: busybox
+    command: ["sleep", "30"]

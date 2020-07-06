@@ -1,24 +1,24 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: benchmarktesting-operator
+  name: cnsbench
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: benchmarktesting-operator
+      name: cnsbench
   template:
     metadata:
       labels:
-        name: benchmarktesting-operator
+        name: cnsbench
     spec:
-      serviceAccountName: benchmarktesting-operator
+      serviceAccountName: cnsbench
       containers:
-        - name: benchmarktesting-operator
+        - name: cnsbench
           # Replace this with the built image name
           image: REPLACE_IMAGE
           command:
-          - benchmarktesting-operator
+          - cnsbench
           imagePullPolicy: Always
           env:
             - name: WATCH_NAMESPACE
@@ -30,4 +30,4 @@ spec:
                 fieldRef:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
-              value: "benchmarktesting-operator"
+              value: "cnsbench"

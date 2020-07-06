@@ -1,0 +1,12 @@
+Might want to separate this out into two pieces: a timer module that generates
+"ticks", and another rate module that receives the ticks and does something
+in response (e.g. increment/decrement a counter).
+
+For now, this is combined into one rate module.
+
+So, each rate object has a list of consumer channels, whenever a tick fires
+each consumer channel gets written to.
+
+Any of the channels should be able to pause the rate.
+
+Until the rate has >0 consumers, it does nothing (is paused).

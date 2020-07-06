@@ -1,0 +1,20 @@
+apiVersion: cnsbench.example.com/v1alpha1
+kind: Benchmark
+metadata:
+  name: example-benchmark
+spec:
+  runtime: 120
+  stopAfter: fio
+  actions:
+    - name: fio
+      runOnceSpec:
+        specName: openebs-fio-job
+        count: 1
+    - name: snapshots
+      runSpec:
+        rateName: rateOne
+        specName: sample-snapshot
+  rates:
+    - name: rateOne
+      constantRateSpec:
+        interval: 10

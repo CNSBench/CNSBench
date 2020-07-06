@@ -13,9 +13,9 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/rest"
 
-	"github.com/benchmark-testing/benchmarktesting-operator/pkg/apis"
-	"github.com/benchmark-testing/benchmarktesting-operator/pkg/controller"
-	"github.com/benchmark-testing/benchmarktesting-operator/version"
+	"github.com/cnsbench/pkg/apis"
+	"github.com/cnsbench/pkg/controller"
+	"github.com/cnsbench/version"
 
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
@@ -86,7 +86,7 @@ func main() {
 
 	ctx := context.TODO()
 	// Become the leader before proceeding
-	err = leader.Become(ctx, "benchmarktesting-operator-lock")
+	err = leader.Become(ctx, "cnsbench-lock")
 	if err != nil {
 		log.Error(err, "")
 		os.Exit(1)

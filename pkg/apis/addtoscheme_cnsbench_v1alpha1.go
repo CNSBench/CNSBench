@@ -1,7 +1,7 @@
 package apis
 
 import (
-	"github.com/benchmark-testing/benchmarktesting-operator/pkg/apis/benchmarking/v1alpha1"
+	"github.com/cnsbench/pkg/apis/cnsbench/v1alpha1"
 )
 
 func init() {

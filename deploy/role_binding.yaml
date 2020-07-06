@@ -1,11 +1,11 @@
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: benchmarktesting-operator
+  name: cnsbench
 subjects:
 - kind: ServiceAccount
-  name: benchmarktesting-operator
+  name: cnsbench
 roleRef:
   kind: Role
-  name: benchmarktesting-operator
+  name: cnsbench
   apiGroup: rbac.authorization.k8s.io
