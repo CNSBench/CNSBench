@@ -77,7 +77,7 @@ type Action struct {
 
 // BenchmarkSpec defines the desired state of Benchmark
 type BenchmarkSpec struct {
-	Runtime	int `json:"runtime"`
+	//Runtime	int `json:"runtime"`
 
 	// Runtime, numactions, ...?
 	// For each action have an exit condition? (or each rate?)

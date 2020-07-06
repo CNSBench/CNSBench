@@ -3,9 +3,9 @@ kind: Benchmark
 metadata:
   name: example-benchmark
 spec:
-  runtime: 120
   actions:
-    - runOnceSpec:
+    - name: testing
+      runOnceSpec:
         specName: sample-pod
         count: 1
   #  - scaleSpec:

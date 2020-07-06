@@ -3,7 +3,6 @@ kind: Benchmark
 metadata:
   name: example-benchmark
 spec:
-  runtime: 120
   stopAfter: fio
   actions:
     - name: fio

@@ -34,6 +34,8 @@ spec:
               actions:
                 items:
                   properties:
+                    name:
+                      type: string
                     runOnceSpec:
                       properties:
                         count:
@@ -128,6 +130,8 @@ spec:
                       required:
                       - rateName
                       type: object
+                  required:
+                  - name
                   type: object
                 type: array
               rates:
@@ -162,14 +166,27 @@ spec:
                   - name
                   type: object
                 type: array
-              runtime:
-                type: integer
+              stopAfter:
+                description: Runtime, numactions, ...? For each action have an exit
+                  condition? (or each rate?)
+                type: string
             required:
             - actions
-            - runtime
             type: object
           status:
             description: BenchmarkStatus defines the observed state of Benchmark
+            properties:
+              runningActions:
+                description: This doesn't include RuneOnce actions
+                type: integer
+              runningRates:
+                type: integer
+              state:
+                type: string
+            required:
+            - runningActions
+            - runningRates
+            - state
             type: object
         type: object
     served: true
