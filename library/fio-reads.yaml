@@ -1,0 +1,86 @@
+apiVersion: v1
+data:
+  config.yaml: |
+    apiVersion: v1
+    data:
+      fio-read-config: |
+        [global]
+        directory=/var/data/
+        size=4g
+
+        [test]
+        rw=read
+        nrfiles=2
+        fadvise_hint=0
+        ioengine=libaio
+        blocksize=1M
+        direct=0
+        numjobs=1
+        time_based
+        runtime=30m
+        per_job_logs=0
+        disable_clat=1
+        disable_slat=1
+        lat_percentiles=1
+    kind: ConfigMap
+    metadata:
+      name: fio-read-config
+      namespace: default
+  pvc.yaml: |
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name:
+      namespace: default
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 30Gi
+      storageClassName:
+      volumeMode: Filesystem
+  workload.yaml: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: fio-read-workload
+      namespace: default
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - image: benchmarking/fio:3.19
+            imagePullPolicy: IfNotPresent
+            name: fio
+            command: ["fio", "/var/config/config", "--output-format=json+", "--output=/tmp/output.json"]
+            volumeMounts:
+              - mountPath: /host/
+                name: hostdir
+              - mountPath: /var/data/
+                name: data
+              - mountPath: /var/config/
+                name: config
+          volumes:
+          - name: hostdir
+            hostPath:
+              path: /mnt/fio/
+          - name: data
+            persistentVolumeClaim:
+              claimName:
+          - name: config
+            configMap:
+              name: fio-read-config
+              items:
+              - key: fio-read-config
+                path: config
+kind: ConfigMap
+metadata:
+  name: fio-reads
+  namespace: library
+  labels:
+    type: workload
+  annotations:
+    outputFile: /tmp/output.json
+    parser: fio-parser

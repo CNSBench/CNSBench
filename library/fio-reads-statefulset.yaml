@@ -1,0 +1,81 @@
+apiVersion: v1
+data:
+  config.yaml: |
+    apiVersion: v1
+    data:
+      fio-read-config: |
+        [global]
+        directory=/var/data/
+        size=4g
+
+        [test]
+        rw=read
+        nrfiles=2
+        fadvise_hint=0
+        ioengine=libaio
+        blocksize=1M
+        direct=0
+        numjobs=1
+        time_based
+        runtime=1m
+        per_job_logs=0
+        disable_clat=1
+        disable_slat=1
+        lat_percentiles=1
+    kind: ConfigMap
+    metadata:
+      name: fio-read-config
+      namespace: default
+  statefulset.yaml: |
+    apiVersion: apps/v1
+    kind: StatefulSet
+    metadata:
+      name: sample-statefulset
+      namespace: default
+      labels:
+        app: sample
+    spec:
+      serviceName: "sample"
+      replicas: 4
+      selector:
+        matchLabels:
+          app: sample
+      template:
+        metadata:
+          labels:
+            app: sample
+        spec:
+          containers:
+          - name: fio
+            image: benchmarking/fio:3.19
+            command: ["fio", "/var/config/config", "--output-format=json+", "--output=/tmp/output.json"]
+            volumeMounts:
+            - name: data
+              mountPath: /var/data/
+            - name: config
+              mountPath: /var/config/
+          volumes:
+          - name: config
+            configMap:
+              name: fio-read-config
+              items:
+              - key: fio-read-config
+                path: config
+      volumeClaimTemplates:
+      - metadata:
+          name: data
+        spec:
+          accessModes: [ "ReadWriteOnce" ]
+          storageClassName:
+          resources:
+            requests:
+              storage: 10Gi
+kind: ConfigMap
+metadata:
+  name: fio-reads-statefulset
+  namespace: library
+  labels:
+    type: workload
+  annotations:
+    outputFile: /tmp/output.json
+    parser: fio-parser
