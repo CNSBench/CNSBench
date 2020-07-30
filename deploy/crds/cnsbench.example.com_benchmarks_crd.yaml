@@ -34,102 +34,70 @@ spec:
               actions:
                 items:
                   properties:
+                    createObjSpec:
+                      properties:
+                        storageClass:
+                          nullable: true
+                          type: string
+                        volName:
+                          nullable: true
+                          type: string
+                        workload:
+                          type: string
+                      required:
+                      - workload
+                      type: object
                     name:
                       type: string
-                    runOnceSpec:
+                    outputs:
                       properties:
-                        count:
-                          description: How many instances of the object to create.  Multiple
-                            instances are all created simultaneously (use the Run
-                            Action type to create multiple instances non-simultaneously).
-                          type: integer
-                        specName:
-                          description: Name of ConfigMap that contains the yaml definition
-                            of the object to be scaled.  If the object does not exist
-                            it will be created. If the ConfigMap contains more than
-                            one object, all are created.
-                          type: string
-                      required:
-                      - count
-                      - specName
-                      type: object
-                    runSpec:
-                      properties:
-                        rateName:
-                          type: string
-                        specName:
-                          description: Name of ConfigMap that contains the yaml definition
-                            of the object to be scaled.  If the object does not exist
-                            it will be created. If the ConfigMap contains more than
-                            one object, all are created.
-                          type: string
-                      required:
-                      - rateName
-                      - specName
-                      type: object
-                    scaleSpec:
-                      properties:
-                        name:
-                          description: Name of the object that will be scaled (object
-                            should already exist)
-                          type: string
-                        rateName:
-                          type: string
-                        selector:
-                          description: Used to select the object that will be scaled
-                            (object should already exist) (Unimplemented)
-                          properties:
-                            matchExpressions:
-                              description: matchExpressions is a list of label selector
-                                requirements. The requirements are ANDed.
-                              items:
-                                description: A label selector requirement is a selector
-                                  that contains values, a key, and an operator that
-                                  relates the key and values.
-                                properties:
-                                  key:
-                                    description: key is the label key that the selector
-                                      applies to.
-                                    type: string
-                                  operator:
-                                    description: operator represents a key's relationship
-                                      to a set of values. Valid operators are In,
-                                      NotIn, Exists and DoesNotExist.
-                                    type: string
-                                  values:
-                                    description: values is an array of string values.
-                                      If the operator is In or NotIn, the values array
-                                      must be non-empty. If the operator is Exists
-                                      or DoesNotExist, the values array must be empty.
-                                      This array is replaced during a strategic merge
-                                      patch.
-                                    items:
-                                      type: string
-                                    type: array
-                                required:
-                                - key
-                                - operator
-                                type: object
-                              type: array
-                            matchLabels:
-                              additionalProperties:
+                        files:
+                          items:
+                            properties:
+                              label:
                                 type: string
-                              description: matchLabels is a map of {key,value} pairs.
-                                A single {key,value} in the matchLabels map is equivalent
-                                to an element of matchExpressions, whose key field
-                                is "key", the operator is "In", and the values array
-                                contains only "value". The requirements are ANDed.
-                              type: object
-                          type: object
-                        specName:
-                          description: Name of ConfigMap that contains the yaml definition
-                            of the object to be scaled.  If the object does not exist
-                            it will be created.  The ConfigMap should only contain
-                            one object.
+                              parser:
+                                type: string
+                              path:
+                                type: string
+                            required:
+                            - path
+                            type: object
+                          type: array
+                        outputName:
                           type: string
                       required:
-                      - rateName
+                      - outputName
                       type: object
+                    rateName:
+                      nullable: true
+                      type: string
+                    snapshotSpec:
+                      properties:
+                        snapshotClass:
+                          type: string
+                        volName:
+                          type: string
+                      required:
+                      - snapshotClass
+                      - volName
+                      type: object
+                  required:
+                  - name
+                  type: object
+                type: array
+              outputs:
+                items:
+                  properties:
+                    httpPostSpec:
+                      properties:
+                        url:
+                          type: string
+                      required:
+                      - url
+                      type: object
+                    name:
+                      type: string
                   required:
                   - name
                   type: object
@@ -165,6 +133,7 @@ spec:
                   required:
                   - name
                   type: object
+                nullable: true
                 type: array
               stopAfter:
                 description: Runtime, numactions, ...? For each action have an exit
@@ -176,16 +145,55 @@ spec:
           status:
             description: BenchmarkStatus defines the observed state of Benchmark
             properties:
+              completionTime:
+                format: date-time
+                nullable: true
+                type: string
+              completionTimeUnix:
+                format: int64
+                type: integer
+              conditions:
+                items:
+                  properties:
+                    lastProbeTime:
+                      format: date-time
+                      nullable: true
+                      type: string
+                    lastTransitionTime:
+                      format: date-time
+                      type: string
+                    message:
+                      nullable: true
+                      type: string
+                    reason:
+                      nullable: true
+                      type: string
+                    status:
+                      type: string
+                    type:
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - status
+                  - type
+                  type: object
+                type: array
               runningActions:
                 description: This doesn't include RuneOnce actions
                 type: integer
               runningRates:
                 type: integer
+              startTimeUnix:
+                format: int64
+                type: integer
               state:
                 type: string
             required:
+            - completionTimeUnix
+            - conditions
             - runningActions
             - runningRates
+            - startTimeUnix
             - state
             type: object
         type: object

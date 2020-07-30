@@ -35,7 +35,7 @@ func (t ConstTimer) Run(pin chan int) {
 }
 
 type Rate struct {
-	Consumers []chan int
+	Consumer chan int
 	ControlChannel chan bool
 }
 
@@ -49,12 +49,10 @@ func (r Rate) SingleRate(t Timer) {
 			log.Info("Exiting SingleRate")
 			return
 		case n := <- pin:
-			for i, c := range r.Consumers {
-				select {
-				case c <- n:
-				default:
-					log.Info("Could not send to consumer", "number", i)
-				}
+			select {
+			case r.Consumer <- n:
+			default:
+				log.Info("Could not send to consumer")
 			}
 		}
 	}
@@ -87,14 +85,11 @@ func (r Rate) IncDecRate(incT Timer, decT Timer, min int, max int) {
 					go incT.Run(pin)	// start inc timer
 				}
 			}
-			for i, c := range r.Consumers {
-				select {
-				case c <- counter:
-				default:
-					log.Info("Could not sent to consumer", "number", i)
-				}
+			select {
+			case r.Consumer <- counter:
+			default:
+				log.Info("Could not sent to consumer")
 			}
-			
 		}
 	}
 }

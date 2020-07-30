@@ -3,44 +3,29 @@ package benchmark
 import (
 	"fmt"
 	"context"
-	//"reflect"
-	"strconv"
-	"net/http"
-	"bytes"
-	"io/ioutil"
+	"time"
+	"strings"
+	"encoding/json"
 
 	"github.com/cnsbench/pkg/rates"
+	"github.com/cnsbench/pkg/utils"
+	"github.com/cnsbench/pkg/output"
 
-	cnsbenchv1alpha1 "github.com/cnsbench/pkg/apis/cnsbench/v1alpha1"
+	cnsbench "github.com/cnsbench/pkg/apis/cnsbench/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
-	appsv1 "k8s.io/api/apps/v1"
-	batchv1 "k8s.io/api/batch/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	//metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil" 
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	"k8s.io/client-go/kubernetes/scheme"
-	//"k8s.io/client-go/pkg/api"
-	//_ "k8s.io/client-go/pkg/api/install"
-	//_ "k8s.io/client-go/pkg/apis/extensions/install"
 	snapshotscheme "github.com/kubernetes-csi/external-snapshotter/v2/pkg/client/clientset/versioned/scheme"
 )
-
-type NameKind struct {
-	Name string
-	Kind string
-}
 
 var log = logf.Log.WithName("controller_benchmark")
 
@@ -64,14 +49,13 @@ func remove(list []string, s string) []string {
 
 type BenchmarkControllerState struct {
 	// Send "true" to these when it's time to exit
-	//RateControlChannels map[string]chan bool
+	//ControlChannels map[string]chan bool
 	//ActionControlChannels map[string]chan bool
 	ActionControlChannel chan bool
-	RateControlChannel chan bool
+	ControlChannel chan bool
 	Actions []string
 	Rates []string
-	StopAfterName string
-	StopAfterKind string
+	RunningObjs []utils.NameKind
 }
 
 // Add creates a new Benchmark Controller and adds it to the Manager. The Manager will set fields on the Controller
@@ -79,47 +63,39 @@ type BenchmarkControllerState struct {
 func Add(mgr manager.Manager) error {
 	snapshotscheme.AddToScheme(scheme.Scheme)
 
-	return add(mgr, newReconciler(mgr))
+	r := newReconciler(mgr)
+	c, err := add(mgr, r)
+	if err != nil {
+		return err
+	}
+
+	r.controller = c
+	return nil
+
+	//return add(mgr, newReconciler(mgr))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
+//func newReconciler(mgr manager.Manager) reconcile.Reconciler {
+func newReconciler(mgr manager.Manager) *ReconcileBenchmark {
 	return &ReconcileBenchmark{client: mgr.GetClient(), scheme: mgr.GetScheme(), state: make(map[string]*BenchmarkControllerState)}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(mgr manager.Manager, r reconcile.Reconciler) (controller.Controller, error) {
 	// Create a new controller
 	c, err := controller.New("benchmark-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Watch for changes to primary resource Benchmark
-	err = c.Watch(&source.Kind{Type: &cnsbenchv1alpha1.Benchmark{}}, &handler.EnqueueRequestForObject{})
+	err = c.Watch(&source.Kind{Type: &cnsbench.Benchmark{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Watch for changes to primary resource Benchmark
-	err = c.Watch(&source.Kind{Type: &corev1.Pod{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType: &cnsbenchv1alpha1.Benchmark{},
-	})
-	if err != nil {
-		return err
-	}
-
-	// Watch for changes to primary resource Benchmark
-	err = c.Watch(&source.Kind{Type: &batchv1.Job{}}, &handler.EnqueueRequestForOwner{
-		IsController: false,
-		OwnerType: &cnsbenchv1alpha1.Benchmark{},
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return c, nil
 }
 
 // blank assignment to verify that ReconcileBenchmark implements reconcile.Reconciler
@@ -132,143 +108,135 @@ type ReconcileBenchmark struct {
 	client client.Client
 	scheme *runtime.Scheme
 
+	controller controller.Controller
+
 	state map[string]*BenchmarkControllerState
 }
 
-func (r *ReconcileBenchmark) cleanup(instance *cnsbenchv1alpha1.Benchmark) error {
+func (r *ReconcileBenchmark) cleanup(instance *cnsbench.Benchmark) error {
 	log.Info("Deleting", "finalizers", instance.GetFinalizers())
 	log.Info("status", "status", instance.Status)
+	r.stopRoutines(instance)
 	if contains(instance.GetFinalizers(), "RateFinalizer") {
-		log.Info("Rate finalizer set, stopping goroutines and removing finalizer")
-		for i := 0; i < instance.Status.RunningRates; i++ {
-			r.state[instance.ObjectMeta.Name].RateControlChannel <- true
-		}
 		instance.SetFinalizers(remove(instance.GetFinalizers(), "RateFinalizer"))
 		if err := r.client.Update(context.TODO(), instance); err != nil {
 			log.Error(err, "Remove RateFinalizer")
 			return err
 		}
 	}
-	if contains(instance.GetFinalizers(), "ActionFinalizer") {
-		log.Info("Action finalizer set, stopping goroutines and removing finalizer")
-		for i := 0; i < instance.Status.RunningActions; i++ {
-			r.state[instance.ObjectMeta.Name].ActionControlChannel <- true
-		}
-		instance.SetFinalizers(remove(instance.GetFinalizers(), "ActionFinalizer"))
-		if err := r.client.Update(context.TODO(), instance); err != nil {
-			log.Error(err, "Remove ActionFinalizer")
-			return err
-		}
-	}
 	log.Info("Done Deleting", "finalizers", instance.GetFinalizers())
 
-	r.state[instance.ObjectMeta.Name].StopAfterName = ""
-	r.state[instance.ObjectMeta.Name].StopAfterKind = ""
+	r.state[instance.ObjectMeta.Name].RunningObjs = []utils.NameKind{}
 
 	return nil
 }
 
-func (r *ReconcileBenchmark) actionExists(instanceName string, name string) bool {
-	return contains(r.state[instanceName].Actions, name)
-}
-
-func (r *ReconcileBenchmark) rateExists(instanceName string, name string) bool {
-	return contains(r.state[instanceName].Rates, name)
-}
-
-func (r *ReconcileBenchmark) addAction(instanceName string, name string) {
-	r.state[instanceName].Actions = append(r.state[instanceName].Actions, name)
-}
-
-func (r *ReconcileBenchmark) addRate(instanceName string, name string) {
-	r.state[instanceName].Rates = append(r.state[instanceName].Rates, name)
-}
-
-func (r *ReconcileBenchmark) startActions(instance *cnsbenchv1alpha1.Benchmark, actions []cnsbenchv1alpha1.Action, stopAfter string) (map[string][]chan int, error) {
-	rateConsumers := make(map[string][]chan int)
-	createdAction := false
+// Only starts actions that do not have any rates associated
+func (r *ReconcileBenchmark) startActions(instance *cnsbench.Benchmark, actions []cnsbench.Action) error {
 	instance.Status.RunningActions = 0
 	for _, a := range actions {
-		r.addAction(instance.ObjectMeta.Name, a.Name)
-		if a.RunOnceSpec.Count != 0 {
+		if a.RateName == "" {
 			log.Info("Run once")
-			objName, err := r.runSpec(instance, a.RunOnceSpec.SpecName, a.RunOnceSpec.Count, "")
-			if a.Name == stopAfter && err == nil {
-				log.Info("saildalsd", "alksjdsakld", a.Name, "alksjda", stopAfter)
-				r.state[instance.ObjectMeta.Name].StopAfterName = objName.Name
-				r.state[instance.ObjectMeta.Name].StopAfterKind = objName.Kind
-			}
-		} else if a.RunSpec.RateName != "" || a.ScaleSpec.RateName != "" {
-			c := make(chan int)
-
-			if a.RunSpec.RateName != "" {
-				log.Info("Launching doRun", "name", a.Name)
-				rateConsumers[a.RunSpec.RateName] = append(rateConsumers[a.RunSpec.RateName], c)
-				go r.doRun(instance, a.Name, c, r.state[instance.ObjectMeta.Name].ActionControlChannel, a.RunSpec)
+			if a.CreateObjSpec.Workload != "" {
+				objs , err := r.RunWorkload(instance, a.CreateObjSpec)
+				if err != nil {
+					log.Error(err, "Running spec")
+					return err
+				}
+				for _, o := range objs {
+					r.state[instance.ObjectMeta.Name].RunningObjs = append(r.state[instance.ObjectMeta.Name].RunningObjs, o)
+				}
 			} else {
-				log.Info("Launching doScale", "name", a.Name)
-				rateConsumers[a.ScaleSpec.RateName] = append(rateConsumers[a.ScaleSpec.RateName], c)
-				go r.doScale(a.Name, c, r.state[instance.ObjectMeta.Name].ActionControlChannel, a.ScaleSpec)
+				fmt.Errorf("Unknown kind of action")
 			}
-			createdAction = true
-			instance.Status.RunningActions += 1
-		} else {
-			return rateConsumers, fmt.Errorf("Unknown kind of action")
 		}
 	}
-
-	if createdAction {
-		if !contains(instance.GetFinalizers(), "ActionFinalizer") {
-			instance.SetFinalizers(append(instance.GetFinalizers(), "ActionFinalizer"))
-		}
-	}
-
-	return rateConsumers, nil
+	return nil
 }
 
-func (r *ReconcileBenchmark) startRates(instance *cnsbenchv1alpha1.Benchmark, rates []cnsbenchv1alpha1.Rate, rateConsumers map[string][]chan int) error {
-	createdRate := false
+func (r *ReconcileBenchmark) startRates(instance *cnsbench.Benchmark) error {
 	instance.Status.RunningRates = 0
-
-	for _, rate := range rates {
-		log.Info(rate.Name, "two", rate.ConstantRateSpec, "three", rate.ConstantIncreaseDecreaseRateSpec)
-		if consumers, ok := rateConsumers[rate.Name]; ok {
-			if rate.ConstantRateSpec.Interval != 0 {
-				r.createConstantRate(rate.ConstantRateSpec, consumers, r.state[instance.ObjectMeta.Name].RateControlChannel)
-				createdRate = true
-			} else if rate.ConstantIncreaseDecreaseRateSpec.IncInterval != 0 {
-				r.createConstantIncreaseDecreaseRate(rate.ConstantIncreaseDecreaseRateSpec, consumers, r.state[instance.ObjectMeta.Name].RateControlChannel)
-			} else {
-				return fmt.Errorf("Unknown kind of rate")
-			}
-			r.addRate(instance.ObjectMeta.Name, rate.Name)
-			instance.Status.RunningRates += 1
-			createdRate = true
+	var c chan int
+	for _, rate := range instance.Spec.Rates {
+		if rate.ConstantRateSpec.Interval != 0 {
+			c = r.createConstantRate(rate.ConstantRateSpec, r.state[instance.ObjectMeta.Name].ControlChannel)
+		} else if rate.ConstantIncreaseDecreaseRateSpec.IncInterval != 0 {
+			c = r.createConstantIncreaseDecreaseRate(rate.ConstantIncreaseDecreaseRateSpec, r.state[instance.ObjectMeta.Name].ControlChannel)
 		} else {
-			return fmt.Errorf("Unused Rate %s", rate.Name)
+			return fmt.Errorf("Unknown kind of rate")
 		}
+		go r.runActions(instance, c, r.state[instance.ObjectMeta.Name].ControlChannel, rate.Name)
+		instance.Status.RunningRates += 1
 	}
 
-	if createdRate {
+	if instance.Status.RunningRates > 0 {
 		if !contains(instance.GetFinalizers(), "RateFinalizer") {
-			instance.SetFinalizers(append(instance.GetFinalizers(), "RateFinalizer"))
+			//instance.SetFinalizers(append(instance.GetFinalizers(), "RateFinalizer"))
 		}
 	}
 
 	return nil
 }
 
-// We're waiting for an object (Pod or Job?) to complete to stop running the benchmark - check if that
-// object is complete
-// XXX For now just assume it's a Job
-func (r *ReconcileBenchmark) checkWaitForObject(name string) (bool, error) {
-	obj := &batchv1.Job{}
-	if err := r.client.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: "default"}, obj); err != nil {
-		return false, err
+type WorkloadResult struct {
+	PodName string
+	NodeName string
+	Results map[string]interface{}
+}
+
+func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime int64, completionTime int64) {
+	log.Info("Do outputs")
+	results := make(map[string]interface{})
+
+	workloadResults := []WorkloadResult{}
+
+	for _, action := range bm.Spec.Actions {
+		pods := &corev1.PodList{}
+		opts := []client.ListOption {
+			client.InNamespace("default"),
+		}
+		if err := r.client.List(context.TODO(), pods, opts...); err != nil {
+			log.Error(err, "Error getting pods")
+		} else {
+			for _, pod := range pods.Items {
+				foundParserContainer := false
+				for _, c := range pod.Spec.Containers {
+					if c.Name == "parser-container" {
+						foundParserContainer = true
+					}
+				}
+				if !foundParserContainer {
+					continue
+				}
+
+				out, err := utils.ReadContainerLog(pod.Name, "parser-container")
+				if err != nil {
+					log.Error(err, "Reading pod output")
+					continue
+				}
+				var r map[string]interface{}
+				if err := json.NewDecoder(strings.NewReader(out)).Decode(&r); err != nil {
+					log.Info("out", "out", out)
+					log.Error(err, "Error decoding result")
+					continue
+				}
+				workloadResults = append(workloadResults, WorkloadResult{pod.Name, pod.Spec.NodeName, r})
+			}
+		}
+		results["WorkloadResults"] = workloadResults
+		output.Output(results, action.Outputs.OutputName, bm, startTime, completionTime)
 	}
-	log.Info("", "status", obj.Status.Succeeded)
-	log.Info("", "spec", obj.Spec.Completions)
-	return obj.Status.Succeeded >= *obj.Spec.Completions, nil
+}
+
+func (r *ReconcileBenchmark) stopRoutines(instance *cnsbench.Benchmark) {
+	instanceName := instance.ObjectMeta.Name
+	for i := 0; i < instance.Status.RunningRates; i++ {
+		// For every rate there's the routine for the rate itself and the routine
+		// that listens for the rate and runs actions.  So send two messages for
+		// each rate we have running
+		r.state[instanceName].ControlChannel <- true
+		r.state[instanceName].ControlChannel <- true
+	}
 }
 
 func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Result, error) {
@@ -276,17 +244,10 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 	reqLogger.Info("Reconciling Benchmark")
 
 	// Fetch the Benchmark instance
-	instance := &cnsbenchv1alpha1.Benchmark{}
+	instance := &cnsbench.Benchmark{}
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
-		log.Info("got error", "", err)
 		if errors.IsNotFound(err) {
-			obj := &unstructured.Unstructured{}
-			if err := r.client.Get(context.TODO(), request.NamespacedName, obj); err != nil {
-				log.Info("but did get", "obj", obj)
-				gvk, _ := apiutil.GVKForObject(obj, r.scheme)
-				log.Info("aaa", "bbb", gvk)
-			}
 			return reconcile.Result{}, nil
 		}
 		log.Error(err, "Error getting instance")
@@ -294,8 +255,7 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 	}
 	instanceName := instance.ObjectMeta.Name
 
-	log.Info("here", "here", instanceName)
-
+	// Is it being deleted?
 	if instance.GetDeletionTimestamp() != nil {
 		if _, exists := r.state[instanceName]; exists {
 			if err := r.cleanup(instance); err != nil {
@@ -308,35 +268,53 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 	}
 
 	// If we're Complete but not deleted yet, nothing to do but return
-	if instance.Status.State == cnsbenchv1alpha1.Complete {
+	if instance.Status.State == cnsbench.Complete {
 		return reconcile.Result{}, nil
 	}
 
+	// If our per-Benchmark obj state doesn't exist, create it
 	if _, exists := r.state[instanceName]; !exists {
-		r.state[instanceName] = &BenchmarkControllerState{make(chan bool), make(chan bool), make([]string, 0), make([]string, 0), "", ""}
+		r.state[instanceName] = &BenchmarkControllerState{make(chan bool), make(chan bool), make([]string, 0), make([]string, 0), []utils.NameKind{}}
 	}
 
-	log.Info("", "", instance.Status)
-	// if we're here, then the object isn't being deleted and exists...
-	if instance.Status.State == cnsbenchv1alpha1.Running {
-		log.Info("RUNNING")
-		saName := r.state[instanceName].StopAfterName
-		log.Info(saName)
-		if saName != "" {
-			complete, err := r.checkWaitForObject(saName)
-			if err != nil {
-				log.Error(err, "Error checking Job status")
+	// XXX This shouldn't be necessary, but if optional arrays are omitted from
+	// the object they get set to "null" which causes Updates to throw an error
+	// We don't need to actually do the Update here, but setting these values
+	// now will ensure if we do Update later on in this reconcile there won't be
+	// an error
+	if instance.Spec.Outputs == nil {
+		instance.Spec.Outputs = []cnsbench.Output{}
+	}
+	for i := 0; i < len(instance.Spec.Actions); i++ {
+		if instance.Spec.Actions[i].Outputs.Files == nil {
+			instance.Spec.Actions[i].Outputs.Files = []cnsbench.OutputFile{}
+		}
+	}
+
+	// if we're here, then we're either still running or haven't started yet
+	if instance.Status.State == cnsbench.Running {
+		// If we're running, check to see if we're complete
+		log.Info("Checking status...")
+		complete, err := utils.CheckCompletion(r.client, r.state[instanceName].RunningObjs)
+		if err != nil {
+			log.Error(err, "Error checking Job status")
+			return reconcile.Result{}, err
+		} else if complete {
+			log.Info("Pods are complete, doing outputs")
+			instance.Status.State = cnsbench.Complete
+			instance.Status.CompletionTime = metav1.Now()
+			instance.Status.CompletionTimeUnix = time.Now().Unix()
+			instance.Status.StartTimeUnix = instance.ObjectMeta.CreationTimestamp.Unix()
+			instance.Status.Conditions[0] = cnsbench.BenchmarkCondition{LastTransitionTime: metav1.Now(), Status: "True", Type: "Complete"}
+			if err := r.client.Status().Update(context.TODO(), instance); err != nil {
+				log.Error(err, "Updating instance")
 				return reconcile.Result{}, err
-			} else if complete {
-				if err := r.cleanup(instance); err != nil {
-					log.Error(err, "Error cleaning up")
-					return reconcile.Result{}, err
-				}
-				instance.Status.State = cnsbenchv1alpha1.Complete
-				if err := r.client.Status().Update(context.TODO(), instance); err != nil {
-					log.Error(err, "Updating instance")
-					return reconcile.Result{}, err
-				}
+			}
+			log.Info("Updated status")
+			r.doOutputs(instance, instance.ObjectMeta.CreationTimestamp.Unix(), time.Now().Unix())
+			if err := r.cleanup(instance); err != nil {
+				log.Error(err, "Error cleaning up")
+				return reconcile.Result{}, err
 			}
 		}
 	} else {
@@ -344,30 +322,21 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 		// Once each of the goroutines are started, the only way they exit is if we tell
 		// them to via the control channel - i.e., even if they encounter errors they just
 		// keep going
-		rateConsumers := make(map[string][]chan int)
 		log.Info("", "", instance.Spec)
-		rateConsumers, err = r.startActions(instance, instance.Spec.Actions, instance.Spec.StopAfter)
+		err = r.startActions(instance, instance.Spec.Actions)
 		if err != nil {
-			for i := 0; i < instance.Status.RunningActions; i++ {
-				r.state[instanceName].ActionControlChannel <- true
-			}
 			log.Error(err, "")
 			return reconcile.Result{}, err
 		}
-		err = r.startRates(instance, instance.Spec.Rates, rateConsumers)
+		err = r.startRates(instance)
 		if err != nil {
-			for i := 0; i < instance.Status.RunningRates; i++ {
-				r.state[instanceName].RateControlChannel <- true
-			}
-			for i := 0; i < instance.Status.RunningActions; i++ {
-				r.state[instanceName].ActionControlChannel <- true
-			}
+			r.stopRoutines(instance)
 			log.Error(err, "")
 			return reconcile.Result{}, err
 		}
 		// if we're here we started everything successfully
-		instance.Status.State = cnsbenchv1alpha1.Running
-		log.Info("Updating...", "aaa", instance.Status)
+		instance.Status.State = cnsbench.Running
+		instance.Status.Conditions = []cnsbench.BenchmarkCondition{{LastTransitionTime: metav1.Now(), Status: "False", Type: "Complete"}}
 		if err := r.client.Status().Update(context.TODO(), instance); err != nil {
 			log.Error(err, "Updating instance")
 			r.cleanup(instance)
@@ -383,131 +352,44 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileBenchmark) sendToES(buf bytes.Buffer, url string) error {
-	req, err := http.NewRequest("POST", url+"/_doc/", &buf)
-	if err != nil {
-		return err
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
-	log.Info("response body", url, string(body))
-
-	return err
-}
-
-func (r *ReconcileBenchmark) doScale(name string, rateCh chan int, controlCh chan bool, spec cnsbenchv1alpha1.Scale) {
-	var target = &appsv1.Deployment{}
-	targetName := types.NamespacedName{Name: spec.Name, Namespace: "default"}
-
-	for {
-		select {
-			case <- controlCh:
-				log.Info("Exiting scale goroutine", "name", name)
-				return
-			case n:= <- rateCh:
-				log.Info("Got rate!", "n", n)
-
-				err := r.client.Get(context.TODO(), targetName, target)
-				if err != nil {
-					log.Error(err, "Error getting Deployment", "targetname", target)
-				} else {
-					replicas := int32(n)
-					target.Spec.Replicas = &replicas
-					if err := r.client.Update(context.TODO(), target); err != nil {
-						log.Error(err, "Error updating target")
-					}
-				}
-		}
-	}
-}
-
-func (r *ReconcileBenchmark) createConstantRate(spec cnsbenchv1alpha1.ConstantRate, consumers []chan int, c chan bool) {
-	rate := rates.Rate{consumers, c}
+func (r *ReconcileBenchmark) createConstantRate(spec cnsbench.ConstantRate, c chan bool) chan int {
 	log.Info("Launching SingleRate")
+	consumerChan := make(chan int)
+	rate := rates.Rate{consumerChan, c}
 	go rate.SingleRate(rates.ConstTimer{spec.Interval})
+	return consumerChan
 }
 
-func (r *ReconcileBenchmark) createConstantIncreaseDecreaseRate(spec cnsbenchv1alpha1.ConstantIncreaseDecreaseRate, consumers []chan int, c chan bool) {
-	rate := rates.Rate{consumers, c}
+func (r *ReconcileBenchmark) createConstantIncreaseDecreaseRate(spec cnsbench.ConstantIncreaseDecreaseRate, c chan bool) chan int {
 	log.Info("Launching IncDecRate")
+	consumerChan := make(chan int)
+	rate := rates.Rate{consumerChan, c}
 	go rate.IncDecRate(rates.ConstTimer{spec.IncInterval}, rates.ConstTimer{spec.DecInterval}, spec.Min, spec.Max)
+	return consumerChan
 }
 
-func (r *ReconcileBenchmark) doRun(bm *cnsbenchv1alpha1.Benchmark, name string, rateCh chan int, controlCh chan bool, spec cnsbenchv1alpha1.Run) {
-	count := 0
+func (r *ReconcileBenchmark) runActions(bm *cnsbench.Benchmark, rateCh chan int, controlCh chan bool, rateName string) {
 	for {
 		select {
-			case <- controlCh:
-				log.Info("Exiting run goroutine", "name", name)
-				return
-			case n:= <- rateCh:
-				log.Info("Got rate!", "n", n)
-				r.runSpec(bm, spec.SpecName, 1, "-"+strconv.Itoa(count))
-				count += 1
+		case <- controlCh:
+			log.Info("Exiting run goroutine", "name", rateName)
+			return
+		case n:= <- rateCh:
+			log.Info("Got rate!", "n", n)
+			for _, a := range bm.Spec.Actions {
+				if a.RateName == rateName {
+					r.runAction(bm, a)
+				}
+			}
 		}
 	}
 }
 
-func (r *ReconcileBenchmark) runSpec(bm *cnsbenchv1alpha1.Benchmark, specName string, count int, suffix string) (NameKind, error) {
-	cm := &corev1.ConfigMap{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: specName, Namespace: "default"}, cm)
-	if err != nil {
-		log.Error(err, "Error getting ConfigMap", specName)
-		return NameKind{}, err
+func (r *ReconcileBenchmark) runAction(bm *cnsbench.Benchmark, a cnsbench.Action) {
+	log.Info("Running action", "name", a)
+	if a.SnapshotSpec.VolName != "" {
+		r.CreateSnapshot(bm, a.SnapshotSpec)
+	} else {
+		log.Info("Unknown kind of action")
 	}
-
-	decode := scheme.Codecs.UniversalDeserializer().Decode
-
-	ret := NameKind{"", ""}
-	for k := range cm.Data {
-		//log.Info(k)
-		//log.Info(cm.Data[k])
-		obj, _, err := decode([]byte(cm.Data[k]), nil, nil)
-		if err != nil {
-			log.Error(err, "Error decoding yaml")
-			return ret, err
-		}
-	
-		//log.Info("obj", "obj", obj)
-		for i := 0; i < count; i++ {
-			obj2 := obj.DeepCopyObject()
-			name, err := meta.NewAccessor().Name(obj2)
-			kind, err := meta.NewAccessor().Kind(obj2)
-			if err != nil {
-				log.Error(err, "Error getting name")
-				return ret, err
-			}
-			name += "-"+strconv.Itoa(i)+suffix
-			meta.NewAccessor().SetName(obj2, name)
-			//log.Info("Creating object", "obj", obj2)
-			objMeta, err := meta.Accessor(obj2)
-			if err != nil {
-				log.Error(err, "Error getting ObjectMeta from obj", name)
-				return ret, err
-			}
-			if err := controllerutil.SetControllerReference(bm, objMeta, r.scheme); err != nil {
-                                log.Error(err, "Error making object child of Benchmark")
-				return ret, err
-                        }
-			if err := controllerutil.SetOwnerReference(bm, objMeta, r.scheme); err != nil {
-
-                                log.Error(err, "Error making object child of Benchmark")
-				return ret, err
-                        }
-			if err := r.client.Create(context.TODO(), obj2); err != nil {
-				log.Error(err, "Error creating object")
-				return ret, err
-			}
-			ret = NameKind{name, kind}
-		}
-	}
-	return ret, nil
 }
