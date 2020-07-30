@@ -1,0 +1,12 @@
+Implement Scale action
+Implement init actions
+Implement event logging
+Better output scheme
+Integrate results collection
+Refactor parser setup
+Implement Resize action
+Implement Delete action
+
+Better error handling
+Allow non-default namespaces
+More workloads for library 
