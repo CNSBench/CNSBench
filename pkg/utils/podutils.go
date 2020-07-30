@@ -3,10 +3,7 @@ package utils
 import (
 	"fmt"
 	"os"
-	"reflect"
 	"context"
-	//"io"
-	//"bufio"
 	"bytes"
         "k8s.io/apimachinery/pkg/runtime"
         "k8s.io/apimachinery/pkg/api/meta"
@@ -16,12 +13,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	utilptr "k8s.io/utils/pointer"
-	"gopkg.in/yaml.v2"
 )
 
 type NameKind struct {
@@ -69,9 +63,6 @@ func StatefulSetComplete(c client.Client, name string) (bool, error) {
 	if err := c.List(context.TODO(), pods, &client.ListOptions{Namespace: "default", LabelSelector: labelSelector}); err != nil {
 		return false, err
 	} else {
-		/*if len(pods.Items) < 1 {
-			return false, nil
-		}*/
 		for _, pod := range pods.Items {
 			numContainers := len(pod.Status.ContainerStatuses)
 			if numContainers > 0 && pod.Status.ContainerStatuses[numContainers-1].State.Terminated != nil {
@@ -81,13 +72,6 @@ func StatefulSetComplete(c client.Client, name string) (bool, error) {
 					updated = true
 				}
 			}
-			/*
-			for _, c := range pod.Status.ContainerStatuses {
-				fmt.Println(c.State.Terminated)
-				if c.State.Terminated == nil {
-					return false, nil
-				}
-			}*/
 		}
 	}
 
