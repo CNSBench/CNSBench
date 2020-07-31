@@ -34,7 +34,6 @@ func CheckCompletion(c client.Client, objs []NameKind) (bool, error) {
 				return complete, err
 			}
 		} else if o.Kind == "StatefulSet" {
-			fmt.Println("statefulset...")
 			if complete, err := StatefulSetComplete(c, o.Name); err != nil || !complete {
 				return complete, err
 			}
@@ -44,16 +43,17 @@ func CheckCompletion(c client.Client, objs []NameKind) (bool, error) {
 }
 
 func StatefulSetComplete(c client.Client, name string) (bool, error) {
-	updated := false
+	//updated := false
 
 	obj := &appsv1.StatefulSet{}
 	if err := c.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: "default"}, obj); err != nil {
 		return false, err
 	}
+	/*
 	annotations := obj.ObjectMeta.Annotations
 	if annotations == nil {
 		annotations = make(map[string]string)
-	}
+	}*/
 
 	labelSelector, err := metav1.LabelSelectorAsSelector(obj.Spec.Selector)
 	if err != nil {
@@ -64,6 +64,12 @@ func StatefulSetComplete(c client.Client, name string) (bool, error) {
 		return false, err
 	} else {
 		for _, pod := range pods.Items {
+			for _, c := range pod.Status.ContainerStatuses {
+				if c.RestartCount == 0 {
+					return false, nil
+				}
+			}
+			/*
 			numContainers := len(pod.Status.ContainerStatuses)
 			if numContainers > 0 && pod.Status.ContainerStatuses[numContainers-1].State.Terminated != nil {
 				// container is done, add to annotations
@@ -71,10 +77,11 @@ func StatefulSetComplete(c client.Client, name string) (bool, error) {
 					annotations[pod.Name] = "complete"
 					updated = true
 				}
-			}
+			}*/
 		}
 	}
 
+	/*
 	fmt.Println(annotations, len(annotations), updated, int(*obj.Spec.Replicas))
 	if updated {
 		obj.ObjectMeta.Annotations = annotations
@@ -84,6 +91,8 @@ func StatefulSetComplete(c client.Client, name string) (bool, error) {
 	}
 
 	return len(annotations) >= int(*obj.Spec.Replicas), nil
+	*/
+	return true, nil
 }
 
 func JobComplete(c client.Client, name string) (bool, error) {

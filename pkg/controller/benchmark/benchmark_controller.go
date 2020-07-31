@@ -224,7 +224,9 @@ func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime int64, 
 			}
 		}
 		results["WorkloadResults"] = workloadResults
-		output.Output(results, action.Outputs.OutputName, bm, startTime, completionTime)
+		if err := output.Output(results, action.Outputs.OutputName, bm, startTime, completionTime); err != nil {
+			log.Error(err, "Error sending outputs")
+		}
 	}
 }
 

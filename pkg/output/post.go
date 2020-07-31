@@ -4,16 +4,10 @@ import (
 	"fmt"
 	"bytes"
 	"net/http"
-	"encoding/json"
 )
 
-func HttpPost(o OutputStruct, url string) error {
-	buf := new(bytes.Buffer)
-	err := json.NewEncoder(buf).Encode(o)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequest("POST", url, bytes.NewReader(buf.Bytes()))
+func HttpPost(reader *bytes.Reader, url string) error {
+	req, err := http.NewRequest("POST", url, reader)
 	if err != nil {
 		return err
 	}
@@ -21,9 +15,11 @@ func HttpPost(o OutputStruct, url string) error {
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
+		if resp != nil && resp.ContentLength > 0 {
 			buf := new(bytes.Buffer)
 			buf.ReadFrom(resp.Body)
 			fmt.Println(buf.String())
+		}
 		return err
 	}
 	defer resp.Body.Close()
