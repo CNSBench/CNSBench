@@ -63,7 +63,14 @@ func StatefulSetComplete(c client.Client, name string) (bool, error) {
 	if err := c.List(context.TODO(), pods, &client.ListOptions{Namespace: "default", LabelSelector: labelSelector}); err != nil {
 		return false, err
 	} else {
+		if len(pods.Items) == 0 {
+			return false, nil
+		}
 		for _, pod := range pods.Items {
+			if len(pod.Status.ContainerStatuses) == 0 {
+				return false, nil
+			}
+			fmt.Println(len(pod.Status.ContainerStatuses))
 			for _, c := range pod.Status.ContainerStatuses {
 				if c.RestartCount == 0 {
 					return false, nil
