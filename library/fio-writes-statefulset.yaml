@@ -3,13 +3,13 @@ data:
   config.yaml: |
     apiVersion: v1
     data:
-      fio-read-config: |
+      fio-write-config: |
         [global]
         directory=/var/data/
         size=4g
 
         [test]
-        rw=read
+        rw=write
         nrfiles=2
         fadvise_hint=0
         ioengine=libaio
@@ -24,7 +24,7 @@ data:
         lat_percentiles=1
     kind: ConfigMap
     metadata:
-      name: fio-read-config
+      name: fio-write-config
       namespace: default
   statefulset.yaml: |
     apiVersion: apps/v1
@@ -57,9 +57,9 @@ data:
           volumes:
           - name: config
             configMap:
-              name: fio-read-config
+              name: fio-write-config
               items:
-              - key: fio-read-config
+              - key: fio-write-config
                 path: config
       volumeClaimTemplates:
       - metadata:
@@ -72,7 +72,7 @@ data:
               storage: 10Gi
 kind: ConfigMap
 metadata:
-  name: fio-reads-statefulset
+  name: fio-writes-statefulset
   namespace: library
   labels:
     type: workload
