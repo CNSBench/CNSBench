@@ -154,6 +154,45 @@ func ReadContainerLog(pod string, container string) (string, error) {
 	return buf.String(), nil
 }
 
+func UseUserConfig(obj runtime.Object, config string) (runtime.Object, error) {
+	kind, err := meta.NewAccessor().Kind(obj)
+	if err != nil {
+		return nil, err
+	}
+	switch kind {
+	case "Job":
+		pt := *obj.(*batchv1.Job)
+		useUserConfig(&pt.Spec.Template.Spec, config)
+		return runtime.Object(&pt), nil
+	case "StatefulSet":
+		pt := *obj.(*appsv1.StatefulSet)
+		useUserConfig(&pt.Spec.Template.Spec, config)
+		return runtime.Object(&pt), nil
+	case "Deployment":
+		pt := *obj.(*appsv1.Deployment)
+		useUserConfig(&pt.Spec.Template.Spec, config)
+		return runtime.Object(&pt), nil
+	case "ReplicaSet":
+		pt := *obj.(*appsv1.ReplicaSet)
+		useUserConfig(&pt.Spec.Template.Spec, config)
+		return runtime.Object(&pt), nil
+	case "Pod":
+		pt := *obj.(*corev1.Pod)
+		useUserConfig(&pt.Spec, config)
+		return runtime.Object(&pt), nil
+	}
+	return obj, nil
+}
+
+func useUserConfig(spec *corev1.PodSpec, config string) {
+	for _, v := range spec.Volumes {
+		if v.Name == "config" {
+			v.ConfigMap.Name = config
+			break
+		}
+	}
+}
+
 func AddParserContainerGeneric(obj runtime.Object, parserCMName string, logFilename string) (runtime.Object, error) {
 	kind, err := meta.NewAccessor().Kind(obj)
 	if err != nil {

@@ -48,47 +48,24 @@ type Rate struct {
 	ConstantIncreaseDecreaseRateSpec ConstantIncreaseDecreaseRate `json:"constantIncreaseDecreaseRateSpec,omitempty"`
 }
 
-/*
-type RunOnce struct {
-	// Name of ConfigMap that contains the yaml definition of the object to be
-	// scaled.  If the object does not exist it will be created.
-	// If the ConfigMap contains more than one object, all are created.
-	SpecName string `json:"specName"`
-
-	// How many instances of the object to create.  Multiple instances are all
-	// created simultaneously (use the Run Action type to create multiple
-	// instances non-simultaneously).
-	Count int `json:"count"`
-}
-
-type Run struct {
-	// Name of ConfigMap that contains the yaml definition of the object to be
-	// scaled.  If the object does not exist it will be created.
-	// If the ConfigMap contains more than one object, all are created.
-	SpecName string `json:"specName"`
-
-}
-
-type Scale struct {
-	// Used to select the object that will be scaled (object should already exist)
-	// (Unimplemented)
-	// +optional
-	Selector metav1.LabelSelector `json:"selector,omitempty"`
-
-	// Name of the object that will be scaled (object should already exist)
-	// +optional
-	Name string `json:"name,omitempty"`
-
-	// Name of ConfigMap that contains the yaml definition of the object to be
-	// scaled.  If the object does not exist it will be created.  The ConfigMap
-	// should only contain one object.
-	// +optional
-	SpecName string `json:"specName,omitempty"`
-}*/
-
+// Snapshots and deletions can operate on an individual object or a selector
+// if a selector, then there may be multiple objects that match - should
+// specify different policies for deciding which object to delete, e.g.
+// "newest", "oldest", "random", ???
 type Snapshot struct {
 	VolName string `json:"volName"`
 	SnapshotClass string `json:"snapshotClass"`
+}
+
+type Delete struct {
+	ObjName string `json:"objName"`
+	ObjKind string `json:"objKind"`
+}
+
+// TODO: need a way of specifying how to scale - up or down, and by how much
+type Scale struct {
+	ObjName string `json:"objName"`
+	ObjKind string `json:"objKind"`
 }
 
 type CreateObj struct {
@@ -101,15 +78,15 @@ type CreateObj struct {
 	// +optional
 	// +nullable
 	StorageClass string `json:"storageClass"`
+
+	// +optional
+	// +nullable
+	Config string `json:"config"`
 }
 
 type Action struct {
 	Name string `json:"name"`
 
-	// +optional
-	//RunOnceSpec RunOnce `json:"runOnceSpec"`
-	// +optional
-	//RunSpec Run `json:"runSpec"`
 	// +optional
 	//ScaleSpec Scale `json:"scaleSpec"`
 
@@ -117,6 +94,10 @@ type Action struct {
 	CreateObjSpec CreateObj `json:"createObjSpec"`
 	// +optional
 	SnapshotSpec Snapshot `json:"snapshotSpec"`
+	// +optional
+	ScaleSpec Scale `json:"scaleSpec"`
+	// +optional
+	DeleteSpec Delete `json:"deleteSpec"`
 
 	// +optional
 	Outputs ActionOutput `json:"outputs"`

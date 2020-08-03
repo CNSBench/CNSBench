@@ -23,6 +23,8 @@ import (
 	snapshotscheme "github.com/kubernetes-csi/external-snapshotter/v2/pkg/client/clientset/versioned/scheme"
 	"k8s.io/apiserver/pkg/storage/names" 
 	snapshotv1beta1 "github.com/kubernetes-csi/external-snapshotter/v2/pkg/apis/volumesnapshot/v1beta1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func (r *ReconcileBenchmark) createObj(bm *cnsbench.Benchmark, obj runtime.Object, makeOwner bool) error {
@@ -105,13 +107,25 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 
 		kind, err := meta.NewAccessor().Kind(obj)
 		log.Info("KIND", "KIND", kind)
+		if kind == "ConfigMap" && k == "config.yaml" && a.Config != ""{
+			// User provided their own config, don't create the default one from the workload
+			continue
+		}
 		if kind == "PersistentVolumeClaim" {
 			obj.(*corev1.PersistentVolumeClaim).Spec.StorageClassName = &a.StorageClass
-			obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name = a.VolName
+			if a.VolName == "" {
+				obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name = "test-vol"
+			} else {
+				obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name = a.VolName
+			}
 		} else if kind == "Job" {
 			for i, v := range obj.(*batchv1.Job).Spec.Template.Spec.Volumes {
 				if v.Name == "data" {
-					obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = a.VolName
+					if a.VolName == "" {
+						obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = "test-vol"
+					} else {
+						obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = a.VolName
+					}
 				}
 			}
 			obj, err = utils.AddParserContainerGeneric(obj, cm.ObjectMeta.Annotations["parser"], cm.ObjectMeta.Annotations["outputFile"])
@@ -129,6 +143,10 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 			if err != nil {
 				log.Error(err, "Error adding parser container", cm.ObjectMeta.Annotations)
 			}
+		}
+
+		if a.Config != "" {
+			obj, err = utils.UseUserConfig(obj, a.Config)
 		}
 
 		name, err := meta.NewAccessor().Name(obj)
@@ -180,4 +198,58 @@ func (r *ReconcileBenchmark) CreateSnapshot(bm *cnsbench.Benchmark, s cnsbench.S
 	meta.NewAccessor().SetName(obj, name)
 
 	return r.createObj(bm, obj, false)
+}
+
+func (r *ReconcileBenchmark) DeleteObj(bm *cnsbench.Benchmark, d cnsbench.Delete) error {
+	obj := &unstructured.Unstructured{}
+	obj.SetGroupVersionKind(schema.GroupVersionKind{
+		Group: "",
+		Kind: d.ObjKind,
+		Version: "v1",
+	})
+	if err := r.client.Get(context.TODO(), client.ObjectKey{Name: d.ObjName, Namespace: "default"}, obj); err != nil {
+		return err
+	}
+	return r.client.Delete(context.TODO(), obj)
+}
+
+func (r *ReconcileBenchmark) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale) error {
+	var newSize int32
+	var err error
+	switch s.ObjKind {
+	case "Job":
+		job := &batchv1.Job{}
+		if err := r.client.Get(context.TODO(), client.ObjectKey{Name: s.ObjName, Namespace: "default"}, job); err != nil {
+			return err
+		}
+		newSize = *job.Spec.Completions + 1
+		job.Spec.Completions = &newSize
+		err = r.client.Update(context.TODO(), job)
+	case "StatefulSet":
+		sts := &appsv1.StatefulSet{}
+		if err := r.client.Get(context.TODO(), client.ObjectKey{Name: s.ObjName, Namespace: "default"}, sts); err != nil {
+			return err
+		}
+		newSize = *sts.Spec.Replicas + 1
+		sts.Spec.Replicas = &newSize
+		err = r.client.Update(context.TODO(), sts)
+	case "Deployment":
+		dep := &appsv1.Deployment{}
+		if err := r.client.Get(context.TODO(), client.ObjectKey{Name: s.ObjName, Namespace: "default"}, dep); err != nil {
+			return err
+		}
+		newSize = *dep.Spec.Replicas + 1
+		dep.Spec.Replicas = &newSize
+		err = r.client.Update(context.TODO(), dep)
+	case "ReplicaSet":
+		rs := &appsv1.ReplicaSet{}
+		if err := r.client.Get(context.TODO(), client.ObjectKey{Name: s.ObjName, Namespace: "default"}, rs); err != nil {
+			return err
+		}
+		newSize = *rs.Spec.Replicas + 1
+		rs.Spec.Replicas = &newSize
+		err = r.client.Update(context.TODO(), rs)
+	}
+
+	return err
 }

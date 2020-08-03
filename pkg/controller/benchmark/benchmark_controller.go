@@ -147,7 +147,9 @@ func (r *ReconcileBenchmark) startActions(instance *cnsbench.Benchmark, actions 
 					r.state[instance.ObjectMeta.Name].RunningObjs = append(r.state[instance.ObjectMeta.Name].RunningObjs, o)
 				}
 			} else {
-				fmt.Errorf("Unknown kind of action")
+				if err := r.runAction(instance, a); err != nil {
+					log.Error(err, "Error running action")
+				}
 			}
 		}
 	}
@@ -380,18 +382,25 @@ func (r *ReconcileBenchmark) runActions(bm *cnsbench.Benchmark, rateCh chan int,
 			log.Info("Got rate!", "n", n)
 			for _, a := range bm.Spec.Actions {
 				if a.RateName == rateName {
-					r.runAction(bm, a)
+					if err := r.runAction(bm, a); err != nil {
+						log.Error(err, "Error running action")
+					}
 				}
 			}
 		}
 	}
 }
 
-func (r *ReconcileBenchmark) runAction(bm *cnsbench.Benchmark, a cnsbench.Action) {
+func (r *ReconcileBenchmark) runAction(bm *cnsbench.Benchmark, a cnsbench.Action) error {
 	log.Info("Running action", "name", a)
 	if a.SnapshotSpec.VolName != "" {
-		r.CreateSnapshot(bm, a.SnapshotSpec)
+		return r.CreateSnapshot(bm, a.SnapshotSpec)
+	} else if a.DeleteSpec.ObjName != "" {
+		return r.DeleteObj(bm, a.DeleteSpec)
+	} else if a.ScaleSpec.ObjName != "" {
+		return r.ScaleObj(bm, a.ScaleSpec)
 	} else {
 		log.Info("Unknown kind of action")
 	}
+	return nil
 }
