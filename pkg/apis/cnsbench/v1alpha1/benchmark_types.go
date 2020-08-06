@@ -82,6 +82,10 @@ type CreateObj struct {
 	// +optional
 	// +nullable
 	Config string `json:"config"`
+
+	// +optional
+	// +nullable
+	Count int `json:"count"`
 }
 
 type Action struct {

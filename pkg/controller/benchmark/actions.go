@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"context"
+	"strconv"
 
 	cnsbench "github.com/cnsbench/pkg/apis/cnsbench/v1alpha1"
 	"github.com/cnsbench/pkg/utils"
@@ -97,69 +98,84 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 	decode := scheme.Codecs.UniversalDeserializer().Decode
 
 	ret := []utils.NameKind{}
-	for k := range cm.Data {
-		objBytes := []byte(cm.Data[k])
-		obj, _, err := decode(objBytes, nil, nil)
-		if err != nil {
-			log.Error(err, "Error decoding yaml")
-			return ret, err
-		}
-
-		kind, err := meta.NewAccessor().Kind(obj)
-		log.Info("KIND", "KIND", kind)
-		if kind == "ConfigMap" && k == "config.yaml" && a.Config != ""{
-			// User provided their own config, don't create the default one from the workload
-			continue
-		}
-		if kind == "PersistentVolumeClaim" {
-			obj.(*corev1.PersistentVolumeClaim).Spec.StorageClassName = &a.StorageClass
-			if a.VolName == "" {
-				obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name = "test-vol"
-			} else {
-				obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name = a.VolName
-			}
-		} else if kind == "Job" {
-			for i, v := range obj.(*batchv1.Job).Spec.Template.Spec.Volumes {
-				if v.Name == "data" {
-					if a.VolName == "" {
-						obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = "test-vol"
-					} else {
-						obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = a.VolName
-					}
-				}
-			}
-			obj, err = utils.AddParserContainerGeneric(obj, cm.ObjectMeta.Annotations["parser"], cm.ObjectMeta.Annotations["outputFile"])
+	if a.Count == 0 {
+		a.Count = 1
+	}
+	for w := 0; w < a.Count; w++ {
+		for k := range cm.Data {
+			objBytes := []byte(cm.Data[k])
+			obj, _, err := decode(objBytes, nil, nil)
 			if err != nil {
-				log.Error(err, "Error adding parser container", cm.ObjectMeta.Annotations)
-			}
-		} else if kind == "StatefulSet" {
-			for i, v := range obj.(*appsv1.StatefulSet).Spec.VolumeClaimTemplates {
-				log.Info("uh", "x", v)
-				if v.Name == "data" {
-					obj.(*appsv1.StatefulSet).Spec.VolumeClaimTemplates[i].Spec.StorageClassName = &a.StorageClass
-				}
-			}
-			obj, err = utils.AddParserContainerGeneric(obj, cm.ObjectMeta.Annotations["parser"], cm.ObjectMeta.Annotations["outputFile"])
-			if err != nil {
-				log.Error(err, "Error adding parser container", cm.ObjectMeta.Annotations)
-			}
-		}
-
-		if a.Config != "" {
-			obj, err = utils.UseUserConfig(obj, a.Config)
-		}
-
-		name, err := meta.NewAccessor().Name(obj)
-		kind, err = meta.NewAccessor().Kind(obj)
-		if err := r.createObj(bm, obj, true); err != nil {
-			if !errors.IsAlreadyExists(err) {
+				log.Error(err, "Error decoding yaml")
 				return ret, err
-			} else {
-				log.Info("Already exists", "name", name)
+			}
+
+			kind, err := meta.NewAccessor().Kind(obj)
+			log.Info("KIND", "KIND", kind)
+			if kind == "ConfigMap" && k == "config.yaml" && a.Config != ""{
+				// User provided their own config, don't create the default one from the workload
 				continue
 			}
+			if kind == "PersistentVolumeClaim" {
+				obj.(*corev1.PersistentVolumeClaim).Spec.StorageClassName = &a.StorageClass
+				if a.VolName == "" {
+					obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name = "test-vol"
+				} else {
+					obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name = a.VolName
+				}
+				if w > 0 {
+					obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name += "-"+strconv.Itoa(w)
+				}
+			} else if kind == "Job" {
+				for i, v := range obj.(*batchv1.Job).Spec.Template.Spec.Volumes {
+					if v.Name == "data" {
+						if a.VolName == "" {
+							obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = "test-vol"
+						} else {
+							obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = a.VolName
+						}
+						if w > 0 {
+							obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName += "-"+strconv.Itoa(w)
+						}
+					}
+				}
+				obj, err = utils.AddParserContainerGeneric(obj, cm.ObjectMeta.Annotations["parser"], cm.ObjectMeta.Annotations["outputFile"])
+				if err != nil {
+					log.Error(err, "Error adding parser container", cm.ObjectMeta.Annotations)
+				}
+			} else if kind == "StatefulSet" {
+				for i, v := range obj.(*appsv1.StatefulSet).Spec.VolumeClaimTemplates {
+					log.Info("uh", "x", v)
+					if v.Name == "data" {
+						obj.(*appsv1.StatefulSet).Spec.VolumeClaimTemplates[i].Spec.StorageClassName = &a.StorageClass
+					}
+				}
+				obj, err = utils.AddParserContainerGeneric(obj, cm.ObjectMeta.Annotations["parser"], cm.ObjectMeta.Annotations["outputFile"])
+				if err != nil {
+					log.Error(err, "Error adding parser container", cm.ObjectMeta.Annotations)
+				}
+			}
+
+			if a.Config != "" {
+				obj, err = utils.UseUserConfig(obj, a.Config)
+			}
+
+			name, err := meta.NewAccessor().Name(obj)
+			kind, err = meta.NewAccessor().Kind(obj)
+			if w > 0 {
+				name += "-"+strconv.Itoa(w)
+				meta.NewAccessor().SetName(obj, name)
+			}
+			if err := r.createObj(bm, obj, true); err != nil {
+				if !errors.IsAlreadyExists(err) {
+					return ret, err
+				} else {
+					log.Info("Already exists", "name", name)
+					continue
+				}
+			}
+			ret = append(ret, utils.NameKind{name, kind})
 		}
-		ret = append(ret, utils.NameKind{name, kind})
 	}
 	return ret, nil
 }
