@@ -123,9 +123,6 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 				} else {
 					obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name = a.VolName
 				}
-				if w > 0 {
-					obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name += "-"+strconv.Itoa(w)
-				}
 			} else if kind == "Job" {
 				for i, v := range obj.(*batchv1.Job).Spec.Template.Spec.Volumes {
 					if v.Name == "data" {
@@ -134,7 +131,7 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 						} else {
 							obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = a.VolName
 						}
-						if w > 0 {
+						if a.Count > 0 {
 							obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName += "-"+strconv.Itoa(w)
 						}
 					}
@@ -162,7 +159,7 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 
 			name, err := meta.NewAccessor().Name(obj)
 			kind, err = meta.NewAccessor().Kind(obj)
-			if w > 0 {
+			if a.Count > 0 && kind != "ConfigMap" {
 				name += "-"+strconv.Itoa(w)
 				meta.NewAccessor().SetName(obj, name)
 			}
