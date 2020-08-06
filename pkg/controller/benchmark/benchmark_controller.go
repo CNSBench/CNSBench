@@ -216,8 +216,13 @@ func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime int64, 
 					log.Error(err, "Reading pod output")
 					continue
 				}
+				lastLine, err := utils.GetLastLine(out)
+				if err != nil {
+					log.Error(err, "Reading getting last line")
+					continue
+				}
 				var r map[string]interface{}
-				if err := json.NewDecoder(strings.NewReader(out)).Decode(&r); err != nil {
+				if err := json.NewDecoder(strings.NewReader(lastLine)).Decode(&r); err != nil {
 					log.Info("out", "out", out)
 					log.Error(err, "Error decoding result")
 					continue

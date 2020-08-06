@@ -5,6 +5,8 @@ import (
 	"os"
 	"context"
 	"bytes"
+	"strings"
+	"bufio"
         "k8s.io/apimachinery/pkg/runtime"
         "k8s.io/apimachinery/pkg/api/meta"
 	appsv1 "k8s.io/api/apps/v1"
@@ -119,6 +121,15 @@ func PVCComplete(c client.Client, name string) (bool, error) {
 	return obj.Status.Phase == "Bound", nil
 
 	//return false, nil
+}
+
+func GetLastLine(s string) (string, error) {
+	var lastLine string
+	scanner := bufio.NewScanner(strings.NewReader(s))
+	for scanner.Scan() {
+		lastLine = scanner.Text()
+	}
+	return lastLine, scanner.Err()
 }
 
 func ReadContainerLog(pod string, container string) (string, error) {
