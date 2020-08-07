@@ -138,7 +138,7 @@ func (r *ReconcileBenchmark) startActions(instance *cnsbench.Benchmark, actions 
 		if a.RateName == "" {
 			log.Info("Run once")
 			if a.CreateObjSpec.Workload != "" {
-				objs , err := r.RunWorkload(instance, a.CreateObjSpec)
+				objs , err := r.RunWorkload(instance, a.CreateObjSpec, a.Name)
 				if err != nil {
 					log.Error(err, "Running spec")
 					return err

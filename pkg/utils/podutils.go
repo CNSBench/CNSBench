@@ -3,6 +3,7 @@ package utils
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"context"
 	"bytes"
 	"strings"
@@ -256,4 +257,66 @@ func addParserContainer(spec *corev1.PodSpec, parserCMName string, logFilename s
 	collectorCmvs.Name = "parse-logs"
 	collectorVol.ConfigMap = &collectorCmvs
 	spec.Volumes = append(spec.Volumes, collectorVol)
+}
+
+func AddSyncContainerGeneric(obj runtime.Object, count int, actionName string) (runtime.Object, error) {
+	kind, err := meta.NewAccessor().Kind(obj)
+	if err != nil {
+		return nil, err
+	}
+	if kind == "Job" {
+		pt := *obj.(*batchv1.Job)
+		addSyncContainer(&pt.Spec.Template.Spec, count, actionName)
+		return runtime.Object(&pt), nil
+	} else if kind == "StatefulSet" {
+		pt := *obj.(*appsv1.StatefulSet)
+		addSyncContainer(&pt.Spec.Template.Spec, count, actionName)
+		return runtime.Object(&pt), nil
+	}
+	return obj, nil
+}
+
+func addSyncContainer(spec *corev1.PodSpec, count int, actionName string) {
+	numContainers := len(spec.InitContainers)
+
+	c := corev1.Container{}
+	c.Name = "sync-container"
+	c.Image = "dwdraju/alpine-curl-jq"
+	c.Command = []string{"/scripts/ready.sh", strconv.Itoa(numContainers*count), "actionname%3D"+actionName}
+	c.VolumeMounts = []corev1.VolumeMount{
+		{
+			MountPath: "/scripts/",
+			Name: "ready-script",
+		},
+	}
+	spec.InitContainers = append(spec.InitContainers, c)
+
+	syncVol := corev1.Volume{}
+	syncVol.Name = "ready-script"
+	syncCmvs := corev1.ConfigMapVolumeSource {}
+	syncCmvs.DefaultMode = utilptr.Int32Ptr(0777)
+	syncCmvs.Name = "ready-script"
+	syncVol.ConfigMap = &syncCmvs
+	spec.Volumes = append(spec.Volumes, syncVol)
+}
+
+func AddLabelsGeneric(obj runtime.Object, labels map[string]string) (runtime.Object, error) {
+	kind, err := meta.NewAccessor().Kind(obj)
+	if err != nil {
+		return nil, err
+	}
+	if kind == "Job" {
+		pt := *obj.(*batchv1.Job)
+		addLabels(&pt.Spec.Template.ObjectMeta, labels)
+		return runtime.Object(&pt), nil
+	} else if kind == "StatefulSet" {
+		pt := *obj.(*appsv1.StatefulSet)
+		addLabels(&pt.Spec.Template.ObjectMeta, labels)
+		return runtime.Object(&pt), nil
+	}
+	return obj, nil
+}
+
+func addLabels(spec *metav1.ObjectMeta, labels map[string]string) {
+	spec.Labels = labels
 }

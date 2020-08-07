@@ -78,7 +78,7 @@ func (r *ReconcileBenchmark) createObj(bm *cnsbench.Benchmark, obj runtime.Objec
 	return nil
 }
 
-func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.CreateObj) ([]utils.NameKind, error) {
+func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.CreateObj, actionName string) ([]utils.NameKind, error) {
 	cm := &corev1.ConfigMap{}
 	kubeconfig := os.Getenv("KUBECONFIG")
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
@@ -153,8 +153,28 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 				}
 			}
 
+			labels, err := meta.NewAccessor().Labels(obj)
+			if err != nil {
+				log.Error(err, "Error getting labels")
+			}
+			if labels == nil {
+				labels = make(map[string]string)
+			}
+			labels["actionname"] = actionName
+			log.Info("labels", "labels", labels)
+			meta.NewAccessor().SetLabels(obj, labels)
+
+			obj, err = utils.AddLabelsGeneric(obj, labels)
+			log.Info("asd", "asd", obj, "err", err)
+
 			if a.Config != "" {
 				obj, err = utils.UseUserConfig(obj, a.Config)
+			}
+
+			log.Info("asd", "asd", a.SyncStart)
+			if a.SyncStart {
+				log.Info("uhhh")
+				obj, err = utils.AddSyncContainerGeneric(obj, a.Count, actionName)
 			}
 
 			name, err := meta.NewAccessor().Name(obj)
