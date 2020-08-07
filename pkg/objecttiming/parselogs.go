@@ -34,7 +34,7 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 				continue
 			} else if isCreateEnd(log, results) {
 				i := getCreateEndIndex(log, results)
-				setEndTime(log, &(results[i]))
+				setEndTime(log, results[i])
 				continue
 			}
 		}
@@ -45,7 +45,7 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 				results = append(results, record)
 				continue
 			} else if i := isScaleEnd(log, results); i >= 0 {
-				setEndTime(log, &(results[i]))
+				setEndTime(log, results[i])
 				continue
 			}
 		}
