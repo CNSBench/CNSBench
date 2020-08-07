@@ -13,7 +13,7 @@ import(
 )
 
 func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
-	// Initialize empty array of operations, represented by dictionaries
+	// Initialize empty array of actions, represented by dictionaries
 	var results []jsondict
 	// Create a scanner to wrap the reader. Split by lines (default)
 	scanner := bufio.NewScanner(reader)
@@ -26,7 +26,7 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 		if err := json.Unmarshal([]byte(line), &log); err != nil {
 			panic(err)
 		}
-		// Create operation parsing
+		// Create action parsing
 		if flags & ParseCreate != 0 {
 			if isCreateStart(log, results) {
 				record := getCreateStart(log)
@@ -38,7 +38,7 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 				continue
 			}
 		}
-		// Scale operation parsing
+		// Scale action parsing
 		if flags & ParseScale != 0 {
 			if isScaleStart(log, results) {
 				record := getScaleStart(log)

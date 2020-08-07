@@ -60,7 +60,7 @@ func isScaleStart(log jsondict, all []jsondict) bool {
 	newReplicas.(float64) == oldReplicas.(float64) {
 		return false
 	}
-	// Make sure the unfinished scale operation isn't already being tracked
+	// Make sure the unfinished scale action isn't already being tracked
 	if getScaleEndIndex(log, all) >= 0 {
 		return false
 	}

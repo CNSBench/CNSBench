@@ -1,5 +1,5 @@
 /** helpers.go
- * Helper functions needed by parsing subroutines of all operations
+ * Helper functions needed by parsing subroutines of all actions
  */
 
 package objecttiming
@@ -11,7 +11,7 @@ import "time"
  */
 func initializeRecord(op, nm, rs, ns string, tm time.Time) jsondict {
 	record := make(jsondict)
-	record["operation"] = op
+	record["action"] = op
 	record["name"] = nm
 	record["resource"] = rs
 	record["namespace"] = ns
@@ -20,15 +20,15 @@ func initializeRecord(op, nm, rs, ns string, tm time.Time) jsondict {
 }
 
 /** getGenericStart
- * Returns a new dictionary containing record info that all operations share
+ * Returns a new dictionary containing record info that all actions share
  */
-func getGenericStart(log jsondict, operation string) jsondict {
+func getGenericStart(log jsondict, action string) jsondict {
 	// Get name, resource, namespace of object
 	name, resource, namespace := getIdentification(log)
 	// Get start time of the object
 	time := getStartTime(log)
 	// Create & initialize initial record
-	record := initializeRecord(operation, name, resource, namespace, time)
+	record := initializeRecord(action, name, resource, namespace, time)
 	return record
 }
 
@@ -89,14 +89,14 @@ func getIdentification(log jsondict) (string, string, string) {
 
 /** getEndIndex
  * Searches the given array (all) for a record that matches the given log's ID
- * and the given operation type. Returns the index in the array of said record.
+ * and the given action type. Returns the index in the array of said record.
  */
-func getEndIndex(operation string, log jsondict, all []jsondict) int {
+func getEndIndex(action string, log jsondict, all []jsondict) int {
 	// Get the name, resource, namespace of log
 	name, resource, namespace := getIdentification(log)
 	// Search array for a record that matches the name, resource, namespace
 	for i := len(all)-1; i>=0; i-- {
-		if all[i]["operation"] == operation &&
+		if all[i]["action"] == action &&
 		objectMatch(all[i], name, resource, namespace) {
 			// Only return the index if duration hasn't been set yet
 			if all[i]["duration"] == nil {
@@ -110,7 +110,7 @@ func getEndIndex(operation string, log jsondict, all []jsondict) int {
 }
 
 /** setEndTime
- * Calculates and records the duration of the operation stored in record.
+ * Calculates and records the duration of the action stored in record.
  * Also records any labels that the object may have.
  */
 func setEndTime(log jsondict, record *jsondict) {

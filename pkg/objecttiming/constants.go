@@ -8,15 +8,7 @@ const (
 	ParseResize
 )
 
-/* Unique values for each action */
-const (
-	opCreate = iota
-	opScale
-	opDelete
-	opResize
-)
-
-/* Constants for the string names of each operation */
+/* Constants for the string names of each action */
 const (
 	strCreate = "create"
 	strScale = "scale"
