@@ -282,7 +282,7 @@ func addSyncContainer(spec *corev1.PodSpec, count int, actionName string) {
 	c := corev1.Container{}
 	c.Name = "sync-container"
 	c.Image = "dwdraju/alpine-curl-jq"
-	c.Command = []string{"/scripts/ready.sh", strconv.Itoa(numContainers*count), "actionname%3D"+actionName}
+	c.Command = []string{"/scripts/ready.sh", "actionname%3D"+actionName, strconv.Itoa(numContainers*count)}
 	c.VolumeMounts = []corev1.VolumeMount{
 		{
 			MountPath: "/scripts/",
