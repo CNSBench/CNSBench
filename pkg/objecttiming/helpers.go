@@ -101,23 +101,3 @@ func getEndIndex(action string, log auditlog, all []jsondict) int {
 	}
 	return -1
 }
-
-/** setEndTime
- * Calculates and records the duration of the action stored in record.
- * Also records any labels that the object may have.
- */
-func setEndTime(log auditlog, record jsondict) {
-	// Calculate duration
-	startTime := record["startTime"].(time.Time)
-	endTime := getEndTime(log)
-	duration := timeDiff(startTime, endTime)
-	// Delete startTime from the record
-	delete(record, "startTime")
-	// Set duration in the record
-	record["duration"] = duration
-	// Also record object labels (if there are any) at this point
-	metadata := log.ResponseObject.Metadata
-	if metadata.Labels != nil {
-		record["labels"] = metadata.Labels
-	}
-}

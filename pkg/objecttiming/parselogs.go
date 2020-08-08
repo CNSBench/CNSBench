@@ -10,11 +10,13 @@ import(
 	"bufio"
 	"encoding/json"
 	"io"
+	"time"
 )
 
 func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
-	// Initialize empty array of actions, represented by dictionaries
-	var results []jsondict
+	// Initialize empty slices of actions, represented by dictionaries
+	var ongoing []jsondict	// temporary storage for actions still in progress
+	var results []jsondict	// final slice of finished actions
 	// If no flags are set, return without doing anything
 	if flags == 0 {
 		return results
@@ -36,24 +38,30 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 		}
 		// Create action parsing
 		if flags & ParseCreate != 0 {
-			if isCreateStart(log, results) {
+			if isCreateStart(log, ongoing) {
 				record := getCreateStart(log)
-				results = append(results, record)
+				ongoing = append(ongoing, record)
 				continue
-			} else if isCreateEnd(log, results) {
-				i := getCreateEndIndex(log, results)
-				setEndTime(log, results[i])
+			} else if isCreateEnd(log, ongoing) {
+				i := getCreateEndIndex(log, ongoing)
+				record := ongoing[i]
+				setEndTime(log, record)
+				ongoing = append(ongoing[:i], ongoing[i+1:]...)
+				results = append(results, record)
 				continue
 			}
 		}
 		// Scale action parsing
 		if flags & ParseScale != 0 {
-			if isScaleStart(log, results) {
+			if isScaleStart(log, ongoing) {
 				record := getScaleStart(log)
-				results = append(results, record)
+				ongoing = append(ongoing, record)
 				continue
-			} else if i := isScaleEnd(log, results); i >= 0 {
-				setEndTime(log, results[i])
+			} else if i := isScaleEnd(log, ongoing); i >= 0 {
+				record := ongoing[i]
+				setEndTime(log, record)
+				ongoing = append(ongoing[:i], ongoing[i+1:]...)
+				results = append(results, record)
 				continue
 			}
 		}
@@ -62,4 +70,24 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 		panic(err)
 	}
 	return results
+}
+
+/** setEndTime
+ * Calculates and records the duration of the action stored in record.
+ * Also records any labels that the object may have.
+ */
+ func setEndTime(log auditlog, record jsondict) {
+	// Calculate duration
+	startTime := record["startTime"].(time.Time)
+	endTime := getEndTime(log)
+	duration := timeDiff(startTime, endTime)
+	// Delete startTime from the record
+	delete(record, "startTime")
+	// Set duration in the record
+	record["duration"] = duration
+	// Also record object labels (if there are any) at this point
+	metadata := log.ResponseObject.Metadata
+	if metadata.Labels != nil {
+		record["labels"] = metadata.Labels
+	}
 }
