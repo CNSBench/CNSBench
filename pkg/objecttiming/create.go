@@ -4,46 +4,51 @@
 
 package objecttiming
 
+import "encoding/json"
+
 /* createEndCrit
- * How to identify the last creation log for each supported resource type.
+ * How to identify the last creation log for each supported resource type
+ * by the contents of the .responseObject.status field
  */
 var createEndCrit = jsondict{
 	"pods": jsondict{
-		"responseObject": jsondict{
-			"status": jsondict{
-				"phase": "Running",
-			},
-		},
+		"phase": "Running",
 	},
 }
 
-func isCreateStart(log jsondict, all []jsondict) bool {
+func isCreateStart(log auditlog, all []jsondict) bool {
 	// Start counting object creation from successful create request
-	if log["verb"] != "create" ||
-	int(log["responseStatus"].(jsondict)["code"].(float64)) != 201 {
+	if log.Verb != "create" || log.ResponseStatus.Code != 201 {
 		return false
 	}
 	// Make sure resource type is supported
-	resource := log["objectRef"].(jsondict)["resource"]
-	if resource == nil || createEndCrit[resource.(string)] == nil {
+	if createEndCrit[log.ObjectRef.Resource] == nil {
 		return false
 	}
 	return true
 }
 
-func isCreateEnd(log jsondict, all []jsondict) bool {
+func isCreateEnd(log auditlog, all []jsondict) bool {
 	// Pre-check traits that all end-of-creation logs should have
-	if (log["verb"] != "patch" && log["verb"] != "update") ||
-	int(log["responseStatus"].(jsondict)["code"].(float64)) != 200 {
+	if (log.Verb != "patch" && log.Verb != "update") ||
+	log.ResponseStatus.Code != 200 {
 		return false
 	}
 	// Make sure resource type is supported
-	resource := log["objectRef"].(jsondict)["resource"]
-	if resource == nil || createEndCrit[resource.(string)] == nil {
+	resource := log.ObjectRef.Resource
+	if createEndCrit[resource] == nil {
 		return false
 	}
 	// Check all end-of-creation criteria for the resource type
-	return isMatch(log, createEndCrit[resource.(string)].(jsondict))
+	if status := log.ResponseObject.Status; status != nil {
+		var jsonStatus jsondict
+		if err := json.Unmarshal(status, &jsonStatus); err != nil {
+			panic(err)
+		}
+		return isMatch(jsonStatus, createEndCrit[resource].(jsondict))
+	} else {
+		return false
+	}
 }
 
 /** isMatch
@@ -71,10 +76,10 @@ func isMatch(dict, match jsondict) bool {
 	return true
 }
 
-func getCreateStart(log jsondict) jsondict {
+func getCreateStart(log auditlog) jsondict {
 	return getGenericStart(log, strCreate)
 }
 
-func getCreateEndIndex(log jsondict, all []jsondict) int {
+func getCreateEndIndex(log auditlog, all []jsondict) int {
 	return getEndIndex(strCreate, log, all)
 }

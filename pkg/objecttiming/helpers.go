@@ -22,7 +22,7 @@ func initializeRecord(op, nm, rs, ns string, tm time.Time) jsondict {
 /** getGenericStart
  * Returns a new dictionary containing record info that all actions share
  */
-func getGenericStart(log jsondict, action string) jsondict {
+func getGenericStart(log auditlog, action string) jsondict {
 	// Get name, resource, namespace of object
 	name, resource, namespace := getIdentification(log)
 	// Get start time of the object
@@ -48,42 +48,35 @@ func objectMatch(obj jsondict, name, resource, namespace string) bool {
 /** getName
  * Returns the name of the object in the given log
  */
-func getName(log jsondict) (name string) {
-	if n := log["objectRef"].(jsondict)["name"]; n != nil {
+func getName(log auditlog) string {
+	if name := log.ObjectRef.Name; name != "" {
 		// Can usually get the name of an object from objectRef field
-		name = n.(string)
+		return name
 	} else {
 		// Object creation with name generation (usually for managed objects)
-		responseObject := log["responseObject"].(jsondict)
-		name = responseObject["metadata"].(jsondict)["name"].(string)
+		return log.ResponseObject.Metadata.Name
 	}
-	return
 }
 
 /** getResource
  * Returns the resource type of the object in the given log
  */
-func getResource(log jsondict) string {
-	return log["objectRef"].(jsondict)["resource"].(string)
+func getResource(log auditlog) string {
+	return log.ObjectRef.Resource
 }
 
 /** getNamespace
  * Returns the namespace of the object in the given log
  */
-func getNamespace(log jsondict) (namespace string) {
-	if n := log["objectRef"].(jsondict)["namespace"]; n != nil {
-		namespace = n.(string)
-	} else {
-		namespace = ""
-	}
-	return
+func getNamespace(log auditlog) string {
+	return log.ObjectRef.Namespace
 }
 
 /** getIdentification
  * Returns the name, resource type, and namespace of the given log,
  * which are the three fields by which an object can be uniquely ID-ed
  */
-func getIdentification(log jsondict) (string, string, string) {
+func getIdentification(log auditlog) (string, string, string) {
 	return getName(log), getResource(log), getNamespace(log)
 }
 
@@ -91,7 +84,7 @@ func getIdentification(log jsondict) (string, string, string) {
  * Searches the given array (all) for a record that matches the given log's ID
  * and the given action type. Returns the index in the array of said record.
  */
-func getEndIndex(action string, log jsondict, all []jsondict) int {
+func getEndIndex(action string, log auditlog, all []jsondict) int {
 	// Get the name, resource, namespace of log
 	name, resource, namespace := getIdentification(log)
 	// Search array for a record that matches the name, resource, namespace
@@ -113,7 +106,7 @@ func getEndIndex(action string, log jsondict, all []jsondict) int {
  * Calculates and records the duration of the action stored in record.
  * Also records any labels that the object may have.
  */
-func setEndTime(log jsondict, record jsondict) {
+func setEndTime(log auditlog, record jsondict) {
 	// Calculate duration
 	startTime := record["startTime"].(time.Time)
 	endTime := getEndTime(log)
@@ -123,8 +116,8 @@ func setEndTime(log jsondict, record jsondict) {
 	// Set duration in the record
 	record["duration"] = duration
 	// Also record object labels (if there are any) at this point
-	metadata := log["responseObject"].(jsondict)["metadata"].(jsondict)
-	if metadata["labels"] != nil {
-		record["labels"] = metadata["labels"]
+	metadata := log.ResponseObject.Metadata
+	if metadata.Labels != nil {
+		record["labels"] = metadata.Labels
 	}
 }

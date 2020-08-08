@@ -9,8 +9,8 @@ package objecttiming
 
 import "time"
 
-func getStartTime(log jsondict) (startTime time.Time) {
-	strTime := log["requestReceivedTimestamp"].(string)
+func getStartTime(log auditlog) (startTime time.Time) {
+	strTime := log.RequestReceivedTimestamp
 	var err error
 	if startTime, err = time.Parse(time.RFC3339Nano, strTime); err != nil {
 		panic(err)
@@ -18,8 +18,8 @@ func getStartTime(log jsondict) (startTime time.Time) {
 	return
 }
 
-func getEndTime(log jsondict) (endTime time.Time) {
-	strTime := log["stageTimestamp"].(string)
+func getEndTime(log auditlog) (endTime time.Time) {
+	strTime := log.StageTimestamp
 	var err error
 	if endTime, err = time.Parse(time.RFC3339Nano, strTime); err != nil {
 		panic(err)
