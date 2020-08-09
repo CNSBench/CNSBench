@@ -9,22 +9,22 @@ package objecttiming
 
 import "time"
 
-func getStartTime(log auditlog) (startTime time.Time) {
-	strTime := log.RequestReceivedTimestamp
+func parseStrTime(strTime string) (parsedTime time.Time) {
 	var err error
-	if startTime, err = time.Parse(time.RFC3339Nano, strTime); err != nil {
+	if parsedTime, err = time.Parse(time.RFC3339Nano, strTime); err != nil {
 		panic(err)
 	}
 	return
 }
 
-func getEndTime(log auditlog) (endTime time.Time) {
+func getStartTime(log auditlog) time.Time {
+	strTime := log.RequestReceivedTimestamp
+	return parseStrTime(strTime)
+}
+
+func getEndTime(log auditlog) time.Time {
 	strTime := log.StageTimestamp
-	var err error
-	if endTime, err = time.Parse(time.RFC3339Nano, strTime); err != nil {
-		panic(err)
-	}
-	return
+	return parseStrTime(strTime)
 }
 
 func timeDiff(t1, t2 time.Time) int64 {
