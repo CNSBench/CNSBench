@@ -26,9 +26,7 @@ var scaleEndCrit = map[string]([]string){
     },
     "statefulsets": []string{
         "CurrentReplicas",
-        "CurrentRevision",
         "ReadyReplicas",
-        "UpdatedRevision",
     },
 }
 
@@ -37,9 +35,7 @@ type scaleStatus = struct {
 	CurrentReplicas,
 	FullyLabeledReplicas,
 	ReadyReplicas,
-	UpdatedReplicas,
-	CurrentRevision,
-	UpdatedRevision	uint8
+	UpdatedReplicas	uint8
 }
 
 func isScaleStart(log auditlog, all []jsondict) bool {
