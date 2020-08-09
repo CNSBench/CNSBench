@@ -1,6 +1,6 @@
-/** scale.go
- * variables & functions related to object scaling
- */
+/* scale.go
+variables & functions related to object scaling
+*/
 
 package objecttiming
 
@@ -10,9 +10,9 @@ import (
 )
 
 /* scaleEndCrit
- * What fields in an object's status must match the goal replica count for
- * a scaling to be considered 'done'
- */
+What fields in an object's status must match the goal replica count for
+a scaling to be considered 'done'
+*/
 var scaleEndCrit = map[string]([]string){
 	"deployments": []string{
 		"AvailableReplicas",

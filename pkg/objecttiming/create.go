@@ -1,15 +1,15 @@
-/** create.go
- * variables & functions related to object creation parsing
- */
+/* create.go
+variables & functions related to object creation parsing
+*/
 
 package objecttiming
 
 import "encoding/json"
 
 /* createEndCrit
- * How to identify the last creation log for each supported resource type
- * by the contents of the .responseObject.status field
- */
+How to identify the last creation log for each supported resource type
+by the contents of the .responseObject.status field
+*/
 var createEndCrit = jsondict{
 	"pods": jsondict{
 		"phase": "Running",
@@ -55,10 +55,10 @@ func isCreateEnd(log auditlog, all []jsondict) int {
 	return getCreateEndIndex(log, all)
 }
 
-/** isMatch
- * helper for isCreateEnd
- * recursively checks that all values in match are also found in dict
- */
+/* isMatch
+helper for isCreateEnd
+recursively checks that all values in match are also found in dict
+*/
 func isMatch(dict, match jsondict) bool {
 	for key, val := range match {
 		subdict := dict[key]

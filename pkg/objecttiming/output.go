@@ -1,6 +1,6 @@
-/** output.go
- * Contains code to output object creation data in a table format
- */
+/* output.go
+Contains code to output object creation data in a table format
+*/
 
 package objecttiming
 

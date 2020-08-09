@@ -1,8 +1,8 @@
-/** parselogs.go
- * Contains code for reading an audit file and extracting object
- * creation information.
- * Assumes the audit file consists of single-line json objects.
- */
+/* parselogs.go
+Contains code for reading an audit file and extracting object
+creation information.
+Assumes the audit file consists of single-line json objects.
+*/
 
 package objecttiming
 
@@ -87,10 +87,10 @@ func ParseLogs(reader io.Reader, flags uint8) []jsondict {
 	return results
 }
 
-/** setEndTime
- * Calculates and records the duration of the action stored in record.
- * Also records any labels that the object may have.
- */
+/* setEndTime
+Calculates and records the duration of the action stored in record.
+Also records any labels that the object may have.
+*/
 func setEndTime(log auditlog, record jsondict) {
 	// Calculate duration
 	startTime := record["startTime"].(time.Time)

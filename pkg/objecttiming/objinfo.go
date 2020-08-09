@@ -1,8 +1,8 @@
 /** objinfo.go
- * functions for saving & accessing object info from get & create requests.
- * useful info from objects of relevant resource types is saved in case it's
- * needed later on.
- */
+functions for saving & accessing object info from get & create requests.
+useful info from objects of relevant resource types is saved in case it's
+needed later on.
+*/
 
 package objecttiming
 

@@ -1,14 +1,14 @@
-/** helpers.go
- * Helper functions needed by parsing subroutines of all actions
- */
+/* helpers.go
+Helper functions needed by parsing subroutines of all actions
+*/
 
 package objecttiming
 
 import "time"
 
-/** initializeRecords
- * Creates & initializes a new record with the given values
- */
+/* initializeRecords
+Creates & initializes a new record with the given values
+*/
 func initializeRecord(op, nm, rs, ns string, tm time.Time) jsondict {
 	record := make(jsondict)
 	record["action"] = op
@@ -19,9 +19,9 @@ func initializeRecord(op, nm, rs, ns string, tm time.Time) jsondict {
 	return record
 }
 
-/** getGenericStart
- * Returns a new dictionary containing record info that all actions share
- */
+/* getGenericStart
+Returns a new dictionary containing record info that all actions share
+*/
 func getGenericStart(log auditlog, action string) jsondict {
 	// Get name, resource, namespace of object
 	name, resource, namespace := getIdentification(log)
@@ -32,10 +32,10 @@ func getGenericStart(log auditlog, action string) jsondict {
 	return record
 }
 
-/** objectMatch
- * Returns whether or not name, resource, namespace in obj match the given
- * name, resource, and namespace
- */
+/* objectMatch
+Returns whether or not name, resource, namespace in obj match the given
+name, resource, and namespace
+*/
 func objectMatch(obj jsondict, name, resource, namespace string) bool {
 	if obj["name"] == name &&
 		obj["resource"] == resource &&
@@ -45,9 +45,9 @@ func objectMatch(obj jsondict, name, resource, namespace string) bool {
 	return false
 }
 
-/** getName
- * Returns the name of the object in the given log
- */
+/* getName
+Returns the name of the object in the given log
+*/
 func getName(log auditlog) string {
 	if name := log.ObjectRef.Name; name != "" {
 		// Can usually get the name of an object from objectRef field
@@ -58,32 +58,32 @@ func getName(log auditlog) string {
 	}
 }
 
-/** getResource
- * Returns the resource type of the object in the given log
- */
+/* getResource
+Returns the resource type of the object in the given log
+*/
 func getResource(log auditlog) string {
 	return log.ObjectRef.Resource
 }
 
-/** getNamespace
- * Returns the namespace of the object in the given log
- */
+/* getNamespace
+Returns the namespace of the object in the given log
+*/
 func getNamespace(log auditlog) string {
 	return log.ObjectRef.Namespace
 }
 
-/** getIdentification
- * Returns the name, resource type, and namespace of the given log,
- * which are the three fields by which an object can be uniquely ID-ed
- */
+/* getIdentification
+Returns the name, resource type, and namespace of the given log,
+which are the three fields by which an object can be uniquely ID-ed
+*/
 func getIdentification(log auditlog) (string, string, string) {
 	return getName(log), getResource(log), getNamespace(log)
 }
 
-/** getEndIndex
- * Searches the given array (all) for a record that matches the given log's ID
- * and the given action type. Returns the index in the array of said record.
- */
+/* getEndIndex
+Searches the given array (all) for a record that matches the given log's ID
+and the given action type. Returns the index in the array of said record.
+*/
 func getEndIndex(action string, log auditlog, all []jsondict) int {
 	// Get the name, resource, namespace of log
 	name, resource, namespace := getIdentification(log)
