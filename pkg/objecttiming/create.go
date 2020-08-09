@@ -28,16 +28,16 @@ func isCreateStart(log auditlog, all []jsondict) bool {
 	return true
 }
 
-func isCreateEnd(log auditlog, all []jsondict) bool {
+func isCreateEnd(log auditlog, all []jsondict) int {
 	// Pre-check traits that all end-of-creation logs should have
 	if (log.Verb != "patch" && log.Verb != "update") ||
 	log.ResponseStatus.Code != 200 {
-		return false
+		return -1
 	}
 	// Make sure resource type is supported
 	resource := log.ObjectRef.Resource
 	if createEndCrit[resource] == nil {
-		return false
+		return -1
 	}
 	// Check all end-of-creation criteria for the resource type
 	if status := log.ResponseObject.Status; status != nil {
@@ -45,10 +45,14 @@ func isCreateEnd(log auditlog, all []jsondict) bool {
 		if err := json.Unmarshal(status, &jsonStatus); err != nil {
 			panic(err)
 		}
-		return isMatch(jsonStatus, createEndCrit[resource].(jsondict))
+		if !isMatch(jsonStatus, createEndCrit[resource].(jsondict)) {
+			return -1
+		}
 	} else {
-		return false
+		return -1
 	}
+	// Make sure there's a corresponding create in the records
+	return getCreateEndIndex(log, all)
 }
 
 /** isMatch

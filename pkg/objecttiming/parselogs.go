@@ -21,6 +21,8 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 	if flags == 0 {
 		return results
 	}
+	// Initialize an objinfostore
+	objstore := make(objinfostore)
 	// Create a scanner to wrap the reader. Split by lines (default)
 	scanner := bufio.NewScanner(reader)
 	// For each line/log:
@@ -42,8 +44,7 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 				record := getCreateStart(log)
 				ongoing = append(ongoing, record)
 				continue
-			} else if isCreateEnd(log, ongoing) {
-				i := getCreateEndIndex(log, ongoing)
+			} else if i := isCreateEnd(log, ongoing); i >= 0 {
 				record := ongoing[i]
 				setEndTime(log, record)
 				ongoing = append(ongoing[:i], ongoing[i+1:]...)
@@ -53,8 +54,18 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 		}
 		// Scale action parsing
 		if flags & ParseScale != 0 {
-			if isScaleStart(log, ongoing) {
-				record := getScaleStart(log)
+			if isScaleStart(log, objstore, ongoing) {
+				// If there's an unfinished scale for the same object,
+				// force end tracking it
+				if i := getScaleEndIndex(log, ongoing); i >= 0 {
+					record := ongoing[i]
+					setEndTime(log, record)
+					record["unfinished"] = true
+					ongoing = append(ongoing[:i], ongoing[i+1:]...)
+					results = append(results, record)
+				}
+				// Record the new scale for the object
+				record := getScaleStart(log, objstore)
 				ongoing = append(ongoing, record)
 				continue
 			} else if i := isScaleEnd(log, ongoing); i >= 0 {
@@ -64,6 +75,10 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 				results = append(results, record)
 				continue
 			}
+		}
+		// Save relevant object info, if applicable
+		if isGetCreateRequest(log) {
+			saveObjInfo(log, objstore)
 		}
 	}
 	if err := scanner.Err(); err != nil {

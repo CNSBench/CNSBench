@@ -38,7 +38,7 @@ type scaleStatus = struct {
 	UpdatedReplicas	uint8
 }
 
-func isScaleStart(log auditlog, all []jsondict) bool {
+func isScaleStart(log auditlog, objstore objinfostore, all []jsondict) bool {
 	// Start counting object scaling from successful change to spec.replicas
 	// 2 possible ways: (1) patch object/scale (2) update entire object
 	if log.Verb != "update" &&
@@ -54,29 +54,26 @@ func isScaleStart(log auditlog, all []jsondict) bool {
 	if scaleEndCrit[resource] == nil {
 		return false
 	}
-	// Get the values of .spec.replicas and .status.replicas of the object
-	responseObject := log.ResponseObject
-	if responseObject.Spec == nil || responseObject.Status == nil {
+	// Get .spec.replicas from a previous get request for the object
+	prevRequest := getObjInfo(log, objstore)
+	if prevRequest == nil {
 		return false
 	}
-	var respSpec, respStatus struct { Replicas int }
-	if err := json.Unmarshal(responseObject.Spec, &respSpec); err != nil {
-		panic(err)
-	}
-	if err := json.Unmarshal(responseObject.Status, &respStatus); err != nil {
-		panic(err)
-	}
-	oldReplicas := respStatus.Replicas
-	newReplicas := respSpec.Replicas
-	// Check if .spec.replicas has changed from .status.replicas
-	// Make sure .status.replicas didn't start at 0, which happens at creation
-	// Also make sure .status.replicas and .spec.replicas have values
-	if oldReplicas == 0 || newReplicas == 0 || newReplicas == oldReplicas {
+	oldReplicas := prevRequest["replicas"]
+	// Get .spec.replicas from the current request
+	newReplicas := log.ResponseObject.Spec.Replicas
+	// Make sure the new value of .spec.replicas has changed from the old value
+	// Also make sure both actually have values
+	if oldReplicas == 0 || newReplicas == 0 || oldReplicas == newReplicas {
 		return false
 	}
-	// Make sure the unfinished scale action isn't already being tracked
-	if getScaleEndIndex(log, all) >= 0 {
-		return false
+	// Make sure the scale isn't already being recorded
+	if i := getScaleEndIndex(log, all); i >= 0 {
+		record := all[i]
+		if record["startReplicas"] == oldReplicas &&
+		record["endReplicas"] == newReplicas {
+			return false
+		}
 	}
 	return true
 }
@@ -140,20 +137,13 @@ func isScaleEnd(log auditlog, all []jsondict) int {
 	return i
 }
 
-func getScaleStart(log auditlog) jsondict {
+func getScaleStart(log auditlog, objstore objinfostore) jsondict {
 	// Set up all standard information in the record
 	record := getGenericStart(log, strScale)
 	// Additionally, set startReplicas & endReplicas
-	respObject := log.ResponseObject
-	var responseSpec, responseStatus struct { Replicas uint8 }
-	if err := json.Unmarshal(respObject.Spec, &responseSpec); err != nil {
-		panic(err)
-	}
-	if err := json.Unmarshal(respObject.Status, &responseStatus); err != nil {
-		panic(err)
-	}
-	record["startReplicas"] = responseStatus.Replicas
-	record["endReplicas"] = responseSpec.Replicas
+	prevReq := getObjInfo(log, objstore)
+	record["startReplicas"] = prevReq["replicas"]
+	record["endReplicas"] = log.ResponseObject.Spec.Replicas
 	return record
 }
 
