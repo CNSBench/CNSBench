@@ -14,20 +14,20 @@ import (
  * a scaling to be considered 'done'
  */
 var scaleEndCrit = map[string]([]string){
-    "deployments": []string{
-        "AvailableReplicas",
-        "ReadyReplicas",
-        "UpdatedReplicas",
-    },
-    "replicasets": []string{
-        "AvailableReplicas",
-        "FullyLabeledReplicas",
-        "ReadyReplicas",
-    },
-    "statefulsets": []string{
-        "CurrentReplicas",
-        "ReadyReplicas",
-    },
+	"deployments": []string{
+		"AvailableReplicas",
+		"ReadyReplicas",
+		"UpdatedReplicas",
+	},
+	"replicasets": []string{
+		"AvailableReplicas",
+		"FullyLabeledReplicas",
+		"ReadyReplicas",
+	},
+	"statefulsets": []string{
+		"CurrentReplicas",
+		"ReadyReplicas",
+	},
 }
 
 type scaleStatus = struct {
@@ -35,15 +35,15 @@ type scaleStatus = struct {
 	CurrentReplicas,
 	FullyLabeledReplicas,
 	ReadyReplicas,
-	UpdatedReplicas	uint8
+	UpdatedReplicas uint8
 }
 
 func isScaleStart(log auditlog, objstore objinfostore, all []jsondict) bool {
 	// Start counting object scaling from successful change to spec.replicas
 	// 2 possible ways: (1) patch object/scale (2) update entire object
 	if log.Verb != "update" &&
-	(log.Verb != "patch" || 
-	log.ObjectRef.Subresource != "scale") {
+		(log.Verb != "patch" ||
+			log.ObjectRef.Subresource != "scale") {
 		return false
 	}
 	if log.ResponseStatus.Code != 200 {
@@ -71,7 +71,7 @@ func isScaleStart(log auditlog, objstore objinfostore, all []jsondict) bool {
 	if i := getScaleEndIndex(log, all); i >= 0 {
 		record := all[i]
 		if record["startReplicas"] == oldReplicas &&
-		record["endReplicas"] == newReplicas {
+			record["endReplicas"] == newReplicas {
 			return false
 		}
 	}
@@ -81,7 +81,7 @@ func isScaleStart(log auditlog, objstore objinfostore, all []jsondict) bool {
 func isScaleEnd(log auditlog, all []jsondict) int {
 	// Pre-check traits that all end-of-scale logs should have in common
 	if log.Verb != "update" || log.ObjectRef.Subresource != "status" ||
-	log.ResponseStatus.Code != 200 {
+		log.ResponseStatus.Code != 200 {
 		return -1
 	}
 	// Make sure the resource type is supported

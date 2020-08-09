@@ -38,8 +38,8 @@ func getGenericStart(log auditlog, action string) jsondict {
  */
 func objectMatch(obj jsondict, name, resource, namespace string) bool {
 	if obj["name"] == name &&
-	obj["resource"] == resource &&
-	obj["namespace"] == namespace {
+		obj["resource"] == resource &&
+		obj["namespace"] == namespace {
 		return true
 	}
 	return false
@@ -88,9 +88,9 @@ func getEndIndex(action string, log auditlog, all []jsondict) int {
 	// Get the name, resource, namespace of log
 	name, resource, namespace := getIdentification(log)
 	// Search array for a record that matches the name, resource, namespace
-	for i := len(all)-1; i>=0; i-- {
+	for i := len(all) - 1; i >= 0; i-- {
 		if all[i]["action"] == action &&
-		objectMatch(all[i], name, resource, namespace) {
+			objectMatch(all[i], name, resource, namespace) {
 			// Only return the index if duration hasn't been set yet
 			if all[i]["duration"] == nil {
 				return i

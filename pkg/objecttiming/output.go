@@ -4,22 +4,22 @@
 
 package objecttiming
 
-import(
-	"io"
-	"fmt"
+import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"text/tabwriter"
 )
 
 func printCreateRow(rec jsondict, writer io.Writer) {
 	fmt.Fprintf(writer, "%s\t%s\t%s\t%d\t\t\n", rec["action"], rec["name"],
-	rec["resource"], rec["duration"])
+		rec["resource"], rec["duration"])
 }
 
 func printScaleRow(rec jsondict, writer io.Writer) {
 	fmt.Fprintf(writer, "%s\t%s\t%s\t%d\t%d\t%d\n", rec["action"], rec["name"],
-	rec["resource"], rec["duration"], rec["startReplicas"], rec["endReplicas"])
+		rec["resource"], rec["duration"], rec["startReplicas"], rec["endReplicas"])
 }
 
 func printRow(rec jsondict, writer io.Writer) {

@@ -1,6 +1,6 @@
 /** calculatetimes.go
- * Contains code for 
- * - parsing ISO8601 timestamps and calculating elapsed times for each 
+ * Contains code for
+ * - parsing ISO8601 timestamps and calculating elapsed times for each
  *   object's creation.
  * - getting start and end times from packets
  */

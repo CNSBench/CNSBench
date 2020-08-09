@@ -12,22 +12,25 @@ type auditlog = struct {
 	Stage,
 	Verb,
 	StageTimestamp,
-	RequestReceivedTimestamp	string
-	ObjectRef 					objref
-	ResponseStatus 				struct { Code int16 }
-	RequestObject 				struct { Status json.RawMessage }
-	ResponseObject 				respobject
+	RequestReceivedTimestamp string
+	ObjectRef      objref
+	ResponseStatus struct{ Code int16 }
+	RequestObject  struct{ Status json.RawMessage }
+	ResponseObject respobject
 }
 
 type objref = struct {
 	Resource,
 	Namespace,
 	Name,
-	Subresource	string
+	Subresource string
 }
 
 type respobject = struct {
-	Metadata 	struct { Name string; Labels map[string]string }
-	Spec 		struct { Replicas uint8 }
-	Status 		json.RawMessage
+	Metadata struct {
+		Name   string
+		Labels map[string]string
+	}
+	Spec   struct{ Replicas uint8 }
+	Status json.RawMessage
 }

@@ -31,7 +31,7 @@ func isCreateStart(log auditlog, all []jsondict) bool {
 func isCreateEnd(log auditlog, all []jsondict) int {
 	// Pre-check traits that all end-of-creation logs should have
 	if (log.Verb != "patch" && log.Verb != "update") ||
-	log.ResponseStatus.Code != 200 {
+		log.ResponseStatus.Code != 200 {
 		return -1
 	}
 	// Make sure resource type is supported

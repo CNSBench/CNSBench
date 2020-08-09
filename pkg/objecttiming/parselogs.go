@@ -6,17 +6,17 @@
 
 package objecttiming
 
-import(
+import (
 	"bufio"
 	"encoding/json"
 	"io"
 	"time"
 )
 
-func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
+func ParseLogs(reader io.Reader, flags uint8) []jsondict {
 	// Initialize empty slices of actions, represented by dictionaries
-	var ongoing []jsondict	// temporary storage for actions still in progress
-	var results []jsondict	// final slice of finished actions
+	var ongoing []jsondict // temporary storage for actions still in progress
+	var results []jsondict // final slice of finished actions
 	// If no flags are set, return without doing anything
 	if flags == 0 {
 		return results
@@ -39,7 +39,7 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 			continue
 		}
 		// Create action parsing
-		if flags & ParseCreate != 0 {
+		if flags&ParseCreate != 0 {
 			if isCreateStart(log, ongoing) {
 				record := getCreateStart(log)
 				ongoing = append(ongoing, record)
@@ -53,7 +53,7 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
 			}
 		}
 		// Scale action parsing
-		if flags & ParseScale != 0 {
+		if flags&ParseScale != 0 {
 			if isScaleStart(log, objstore, ongoing) {
 				// If there's an unfinished scale for the same object,
 				// force end tracking it
@@ -91,7 +91,7 @@ func ParseLogs(reader io.Reader, flags uint8) ([]jsondict) {
  * Calculates and records the duration of the action stored in record.
  * Also records any labels that the object may have.
  */
- func setEndTime(log auditlog, record jsondict) {
+func setEndTime(log auditlog, record jsondict) {
 	// Calculate duration
 	startTime := record["startTime"].(time.Time)
 	endTime := getEndTime(log)
