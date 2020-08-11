@@ -23,8 +23,9 @@ func saveObjInfo(log auditlog, store objinfostore) {
 	if log.ResponseStatus.Code == 201 || log.ResponseStatus.Code == 200 {
 		if scaleEndCrit[resource] != nil {
 			toAdd := objinfo{
-				"replicas":  log.ResponseObject.Spec.Replicas,
-				"startTime": parseStrTime(log.RequestReceivedTimestamp),
+				"parallelism": log.ResponseObject.Spec.Parallelism,
+				"replicas":    log.ResponseObject.Spec.Replicas,
+				"startTime":   parseStrTime(log.RequestReceivedTimestamp),
 			}
 			addInfo(toAdd, namespace, resource, name, store)
 		}

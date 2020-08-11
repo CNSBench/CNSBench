@@ -31,6 +31,11 @@ type respobject = struct {
 		Name   string
 		Labels map[string]string
 	}
-	Spec   struct{ Replicas uint8 }
+	Spec   spec
 	Status json.RawMessage
+}
+
+type spec = struct {
+	Replicas    uint8
+	Parallelism uint8
 }

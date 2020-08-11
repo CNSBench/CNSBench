@@ -19,6 +19,9 @@ var scaleEndCrit = map[string]([]string){
 		"ReadyReplicas",
 		"UpdatedReplicas",
 	},
+	"jobs": []string{
+		"Active",
+	},
 	"replicasets": []string{
 		"AvailableReplicas",
 		"FullyLabeledReplicas",
@@ -30,20 +33,58 @@ var scaleEndCrit = map[string]([]string){
 	},
 }
 
+/* scaleStatus
+Struct with all possible relevant status fields for scaling.
+Used as the struct for unmarshaling the .responseObject.status field.
+*/
 type scaleStatus = struct {
 	AvailableReplicas,
 	CurrentReplicas,
 	FullyLabeledReplicas,
 	ReadyReplicas,
 	UpdatedReplicas uint8
+	Active uint8
+}
+
+var replicaLabels = map[string]string{
+	"spec":  "replicas",
+	"start": "startReplicas",
+	"end":   "endReplicas",
+}
+
+/* scaleLabels
+Field labels by category (spec, start, end) for each resource type.
+spec: replicas/parallelism field in the object spec
+start: name for the start replicas/parallelism field in the results json
+end: name for the end replicas/parallelism field in the results json
+*/
+var scaleLabels = map[string]map[string]string{
+	"deployments": replicaLabels,
+	"jobs": map[string]string{
+		"spec":  "parallelism",
+		"start": "startParallelism",
+		"end":   "endParallelism",
+	},
+	"replicasets":  replicaLabels,
+	"statefulsets": replicaLabels,
+}
+
+/* getSpecCrit
+Returns the appropriate field (Parallelism or Replicas) from the spec struct
+of an object, depending on the resource type.
+*/
+func getSpecCrit(resource string, s spec) uint8 {
+	if resource == "jobs" {
+		return s.Parallelism
+	} else {
+		return s.Replicas
+	}
 }
 
 func isScaleStart(log auditlog, objstore objinfostore, all []jsondict) bool {
 	// Start counting object scaling from successful change to spec.replicas
 	// 2 possible ways: (1) patch object/scale (2) update entire object
-	if log.Verb != "update" &&
-		(log.Verb != "patch" ||
-			log.ObjectRef.Subresource != "scale") {
+	if log.Verb != "update" && log.Verb != "patch" {
 		return false
 	}
 	if log.ResponseStatus.Code != 200 {
@@ -59,9 +100,9 @@ func isScaleStart(log auditlog, objstore objinfostore, all []jsondict) bool {
 	if prevRequest == nil {
 		return false
 	}
-	oldReplicas := prevRequest["replicas"]
+	oldReplicas := prevRequest[scaleLabels[resource]["spec"]].(uint8)
 	// Get .spec.replicas from the current request
-	newReplicas := log.ResponseObject.Spec.Replicas
+	newReplicas := getSpecCrit(resource, log.ResponseObject.Spec)
 	// Make sure the new value of .spec.replicas has changed from the old value
 	// Also make sure both actually have values
 	if oldReplicas == 0 || newReplicas == 0 || oldReplicas == newReplicas {
@@ -70,8 +111,8 @@ func isScaleStart(log auditlog, objstore objinfostore, all []jsondict) bool {
 	// Make sure the scale isn't already being recorded
 	if i := getScaleEndIndex(log, all); i >= 0 {
 		record := all[i]
-		if record["startReplicas"] == oldReplicas &&
-			record["endReplicas"] == newReplicas {
+		if record[scaleLabels[resource]["start"]] == oldReplicas &&
+			record[scaleLabels[resource]["end"]] == newReplicas {
 			return false
 		}
 	}
@@ -117,7 +158,7 @@ func isScaleEnd(log auditlog, all []jsondict) int {
 		return -1
 	}
 	// Retrieve the goal replicas from the matching record
-	goalReplicas := all[i]["endReplicas"].(uint8)
+	goalReplicas := all[i][scaleLabels[resource]["end"]].(uint8)
 	// Unmarshal the response object's status
 	respStat := log.ResponseObject.Status
 	if respStat == nil {
@@ -142,8 +183,11 @@ func getScaleStart(log auditlog, objstore objinfostore) jsondict {
 	record := getGenericStart(log, strScale)
 	// Additionally, set startReplicas & endReplicas
 	prevReq := getObjInfo(log, objstore)
-	record["startReplicas"] = prevReq["replicas"]
-	record["endReplicas"] = log.ResponseObject.Spec.Replicas
+	resource := log.ObjectRef.Resource
+	prevSpecVal := prevReq[scaleLabels[resource]["spec"]]
+	record[scaleLabels[resource]["start"]] = prevSpecVal
+	newSpecVal := getSpecCrit(resource, log.ResponseObject.Spec)
+	record[scaleLabels[resource]["end"]] = newSpecVal
 	return record
 }
 
