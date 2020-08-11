@@ -86,6 +86,10 @@ type CreateObj struct {
 	// +optional
 	// +nullable
 	Count int `json:"count"`
+
+	// +optional
+	// +nullable
+	SyncStart bool `json:"syncStart"`
 }
 
 type Action struct {
