@@ -14,6 +14,12 @@ var createEndCrit = jsondict{
 	"pods": jsondict{
 		"phase": "Running",
 	},
+	"persistentvolumes": jsondict{
+		"phase": "Bound",
+	},
+	"persistentvolumeclaims": jsondict{
+		"phase": "Bound",
+	},
 }
 
 func isCreateStart(log auditlog, all []jsondict) bool {
