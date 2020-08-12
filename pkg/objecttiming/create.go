@@ -6,20 +6,22 @@ package objecttiming
 
 import "encoding/json"
 
+/* createStatus
+Relevant fields from the status of an object being created.
+Used as the struct for unmarshaling .responseObject.status
+*/
+type createStatus = struct {
+	Phase string
+}
+
 /* createEndCrit
 How to identify the last creation log for each supported resource type
 by the contents of the .responseObject.status field
 */
-var createEndCrit = jsondict{
-	"pods": jsondict{
-		"phase": "Running",
-	},
-	"persistentvolumes": jsondict{
-		"phase": "Bound",
-	},
-	"persistentvolumeclaims": jsondict{
-		"phase": "Bound",
-	},
+var createEndCrit = map[string]createStatus{
+	"pods":                   createStatus{"Running"},
+	"persistentvolumes":      createStatus{"Bound"},
+	"persistentvolumeclaims": createStatus{"Bound"},
 }
 
 func isCreateStart(log auditlog, all []jsondict) bool {
@@ -28,7 +30,7 @@ func isCreateStart(log auditlog, all []jsondict) bool {
 		return false
 	}
 	// Make sure resource type is supported
-	if createEndCrit[log.ObjectRef.Resource] == nil {
+	if _, found := createEndCrit[log.ObjectRef.Resource]; !found {
 		return false
 	}
 	return true
@@ -42,16 +44,16 @@ func isCreateEnd(log auditlog, all []jsondict) int {
 	}
 	// Make sure resource type is supported
 	resource := log.ObjectRef.Resource
-	if createEndCrit[resource] == nil {
+	if _, found := createEndCrit[resource]; !found {
 		return -1
 	}
 	// Check all end-of-creation criteria for the resource type
 	if status := log.ResponseObject.Status; status != nil {
-		var jsonStatus jsondict
+		var jsonStatus createStatus
 		if err := json.Unmarshal(status, &jsonStatus); err != nil {
 			panic(err)
 		}
-		if !isMatch(jsonStatus, createEndCrit[resource].(jsondict)) {
+		if !isMatch(jsonStatus, createEndCrit[resource]) {
 			return -1
 		}
 	} else {
@@ -63,25 +65,11 @@ func isCreateEnd(log auditlog, all []jsondict) int {
 
 /* isMatch
 helper for isCreateEnd
-recursively checks that all values in match are also found in dict
+checks if s1 and s2 have the same values
 */
-func isMatch(dict, match jsondict) bool {
-	for key, val := range match {
-		subdict := dict[key]
-		if subdict == nil {
-			return false
-		}
-		if submatch, ok := val.(jsondict); ok {
-			if !isMatch(subdict.(jsondict), submatch) {
-				return false
-			}
-		} else if str, ok := val.(string); ok {
-			if subdict.(string) != str {
-				return false
-			}
-		} else {
-			return false
-		}
+func isMatch(s1, s2 createStatus) bool {
+	if s1.Phase != s2.Phase {
+		return false
 	}
 	return true
 }
