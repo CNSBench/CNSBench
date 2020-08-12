@@ -21,7 +21,7 @@ func isGetCreateRequest(log auditlog) bool {
 func saveObjInfo(log auditlog, store objinfostore) {
 	name, resource, namespace := getIdentification(log)
 	if log.ResponseStatus.Code == 201 || log.ResponseStatus.Code == 200 {
-		if scaleEndCrit[resource] != nil {
+		if _, found := scaleEndCrit[resource]; found {
 			toAdd := objinfo{
 				"parallelism": log.ResponseObject.Spec.Parallelism,
 				"replicas":    log.ResponseObject.Spec.Replicas,
