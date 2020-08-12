@@ -7,32 +7,27 @@ Assumes the audit file consists of single-line json objects.
 package objecttiming
 
 import (
-	"bufio"
 	"encoding/json"
-	"io"
 	"time"
 )
 
-func ParseLogs(reader io.Reader, flags uint8) []jsondict {
+func ParseLogs(logs []string, flags uint8) ([]jsondict, error) {
 	// Initialize empty slices of actions, represented by dictionaries
 	var ongoing []jsondict // temporary storage for actions still in progress
 	var results []jsondict // final slice of finished actions
 	// If no flags are set, return without doing anything
 	if flags == 0 {
-		return results
+		return results, nil
 	}
 	// Initialize an objinfostore
 	objstore := make(objinfostore)
 	// Create a scanner to wrap the reader. Split by lines (default)
-	scanner := bufio.NewScanner(reader)
 	// For each line/log:
-	for scanner.Scan() {
-		// Get the line that represents the next log
-		line := scanner.Bytes()
+	for _, line := range logs {
 		// Unmarshal the log string into a json dictionary
 		var log auditlog
-		if err := json.Unmarshal(line, &log); err != nil {
-			panic(err)
+		if err := json.Unmarshal([]byte(line), &log); err != nil {
+			return results, err
 		}
 		// Ignore the log if it's not in the ResponseComplete stage
 		if log.Stage != "ResponseComplete" {
@@ -81,10 +76,7 @@ func ParseLogs(reader io.Reader, flags uint8) []jsondict {
 			saveObjInfo(log, objstore)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		panic(err)
-	}
-	return results
+	return results, nil
 }
 
 /* setEndTime
