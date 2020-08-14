@@ -90,6 +90,10 @@ type CreateObj struct {
 	// +optional
 	// +nullable
 	SyncStart bool `json:"syncStart"`
+
+	// +optional
+	// +nullable
+	SameVolume bool `json:"sameVolume"`
 }
 
 type Action struct {

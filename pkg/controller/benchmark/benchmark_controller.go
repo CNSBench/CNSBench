@@ -10,6 +10,7 @@ import (
 	"github.com/cnsbench/pkg/rates"
 	"github.com/cnsbench/pkg/utils"
 	"github.com/cnsbench/pkg/output"
+	"github.com/cnsbench/pkg/objecttiming"
 
 	cnsbench "github.com/cnsbench/pkg/apis/cnsbench/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -183,7 +184,23 @@ func (r *ReconcileBenchmark) startRates(instance *cnsbench.Benchmark) error {
 type WorkloadResult struct {
 	PodName string
 	NodeName string
+	TimeToCreate int64
 	Results map[string]interface{}
+}
+
+func (r *ReconcileBenchmark) getTiming(name string, timings []map[string]interface{}) int64 {
+	for _, t := range timings {
+		if t["name"] == name {
+			switch v := t["duration"].(type) {
+			case int64:
+				return t["duration"].(int64)
+			default:
+				log.Info("Duration not int64", "t", t, "type", v)
+				return -1
+			}
+		}
+	}
+	return -1
 }
 
 func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime int64, completionTime int64) {
@@ -191,6 +208,19 @@ func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime int64, 
 	results := make(map[string]interface{})
 
 	workloadResults := []WorkloadResult{}
+
+	// TODO: how to specify url in benchmark spec?
+	auditLogs, err := utils.GetAuditLogs(startTime, completionTime, "http://loadbalancer:9200")
+	if err != nil {
+		log.Error(err, "Error getting audit logs")
+	}
+	log.Info("auditlogs", "logs", len(auditLogs))
+	// TODO: better way of specifying flags
+	operationTimes, err := objecttiming.ParseLogs(auditLogs, 1)
+	log.Info("ops", "ops", operationTimes)
+	if err != nil {
+		log.Error(err, "Error parsing audit logs")
+	}
 
 	for _, action := range bm.Spec.Actions {
 		pods := &corev1.PodList{}
@@ -221,13 +251,13 @@ func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime int64, 
 					log.Error(err, "Reading getting last line")
 					continue
 				}
-				var r map[string]interface{}
-				if err := json.NewDecoder(strings.NewReader(lastLine)).Decode(&r); err != nil {
+				var outputMap map[string]interface{}
+				if err := json.NewDecoder(strings.NewReader(lastLine)).Decode(&outputMap); err != nil {
 					log.Info("out", "out", out)
 					log.Error(err, "Error decoding result")
 					continue
 				}
-				workloadResults = append(workloadResults, WorkloadResult{pod.Name, pod.Spec.NodeName, r})
+				workloadResults = append(workloadResults, WorkloadResult{pod.Name, pod.Spec.NodeName, r.getTiming(pod.Name, operationTimes), outputMap})
 			}
 		}
 		results["WorkloadResults"] = workloadResults
@@ -310,6 +340,7 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 			return reconcile.Result{}, err
 		} else if complete {
 			log.Info("Pods are complete, doing outputs")
+			r.doOutputs(instance, instance.ObjectMeta.CreationTimestamp.Unix(), time.Now().Unix())
 			instance.Status.State = cnsbench.Complete
 			instance.Status.CompletionTime = metav1.Now()
 			instance.Status.CompletionTimeUnix = time.Now().Unix()
@@ -320,7 +351,6 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 				return reconcile.Result{}, err
 			}
 			log.Info("Updated status")
-			r.doOutputs(instance, instance.ObjectMeta.CreationTimestamp.Unix(), time.Now().Unix())
 			if err := r.cleanup(instance); err != nil {
 				log.Error(err, "Error cleaning up")
 				return reconcile.Result{}, err

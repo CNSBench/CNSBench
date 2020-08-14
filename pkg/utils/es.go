@@ -68,14 +68,14 @@ func QueryES(url string, query map[string]interface{}, index string, timeField s
 	return results, nil
 }
 
-func GetAuditLogs(start int, end int, url string) ([]string, error) {
+func GetAuditLogs(start int64, end int64, url string) ([]string, error) {
 	q := map[string]interface{} {
 		"sort": []map[string]string{map[string]string{"@timestamp": "asc"}},
 		"query": map[string]interface{} {
 			"range": map[string]interface{} {
 				"@timestamp": map[string]interface{} {
-					"gte": strconv.Itoa(start),
-					"lte": strconv.Itoa(end),
+					"gte": strconv.FormatInt(start, 10),
+					"lte": strconv.FormatInt(end, 10),
 					"format": "epoch_second",
 				},
 			},
