@@ -58,8 +58,8 @@ type Snapshot struct {
 }
 
 type Delete struct {
-	ObjName string `json:"objName"`
-	ObjKind string `json:"objKind"`
+	//ObjName string `json:"objName"`
+	Selector metav1.LabelSelector `json:"selector"`
 }
 
 // TODO: need a way of specifying how to scale - up or down, and by how much
@@ -94,6 +94,9 @@ type CreateObj struct {
 	// +optional
 	// +nullable
 	SameVolume bool `json:"sameVolume"`
+
+	// TODO: Maybe add a generic "workload params" string->string map
+	// that lets users pass arbitrary parameters to the workload?
 }
 
 type Action struct {

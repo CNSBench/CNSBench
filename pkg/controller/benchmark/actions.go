@@ -12,6 +12,7 @@ import (
         appsv1 "k8s.io/api/apps/v1"
         corev1 "k8s.io/api/core/v1"
         batchv1 "k8s.io/api/batch/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,8 +25,8 @@ import (
 	snapshotscheme "github.com/kubernetes-csi/external-snapshotter/v2/pkg/client/clientset/versioned/scheme"
 	"k8s.io/apiserver/pkg/storage/names" 
 	snapshotv1beta1 "github.com/kubernetes-csi/external-snapshotter/v2/pkg/apis/volumesnapshot/v1beta1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	//"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	//"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 func (r *ReconcileBenchmark) createObj(bm *cnsbench.Benchmark, obj runtime.Object, makeOwner bool) error {
@@ -234,6 +235,10 @@ func (r *ReconcileBenchmark) CreateSnapshot(bm *cnsbench.Benchmark, s cnsbench.S
 }
 
 func (r *ReconcileBenchmark) DeleteObj(bm *cnsbench.Benchmark, d cnsbench.Delete) error {
+	// TODO: Generalize to more than just volumes.  I think we need to get all the api groups,
+	// then get all the kinds in those groups, then just iterate through those kinds searching
+	// for objects matching the spec
+	/*
 	obj := &unstructured.Unstructured{}
 	obj.SetGroupVersionKind(schema.GroupVersionKind{
 		Group: "",
@@ -243,7 +248,27 @@ func (r *ReconcileBenchmark) DeleteObj(bm *cnsbench.Benchmark, d cnsbench.Delete
 	if err := r.client.Get(context.TODO(), client.ObjectKey{Name: d.ObjName, Namespace: "default"}, obj); err != nil {
 		return err
 	}
-	return r.client.Delete(context.TODO(), obj)
+	*/
+
+	log.Info("Delete object")
+
+	labelSelector, err := metav1.LabelSelectorAsSelector(&d.Selector)
+	if err != nil {
+		return err
+	}
+	//pvcs := &corev1.PersistentVolumeClaimList{}
+	pvcs := &snapshotv1beta1.VolumeSnapshotList{}
+	if err := r.client.List(context.TODO(), pvcs, &client.ListOptions{Namespace: "default", LabelSelector: labelSelector}); err != nil {
+		return err
+	}
+
+	if len(pvcs.Items) > 0 {
+		log.Info("Deleting first item", "name", pvcs.Items[0].Name)
+		return r.client.Delete(context.TODO(), &pvcs.Items[0])
+	}
+	log.Info("No objects found")
+
+	return nil
 }
 
 func (r *ReconcileBenchmark) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale) error {

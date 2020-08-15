@@ -430,7 +430,7 @@ func (r *ReconcileBenchmark) runAction(bm *cnsbench.Benchmark, a cnsbench.Action
 	log.Info("Running action", "name", a)
 	if a.SnapshotSpec.VolName != "" {
 		return r.CreateSnapshot(bm, a.SnapshotSpec)
-	} else if a.DeleteSpec.ObjName != "" {
+	} else if metav1.FormatLabelSelector(&a.DeleteSpec.Selector) != "" {
 		return r.DeleteObj(bm, a.DeleteSpec)
 	} else if a.ScaleSpec.ObjName != "" {
 		return r.ScaleObj(bm, a.ScaleSpec)
