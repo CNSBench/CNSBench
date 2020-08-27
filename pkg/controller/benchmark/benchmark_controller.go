@@ -30,24 +30,6 @@ import (
 
 var log = logf.Log.WithName("controller_benchmark")
 
-func contains(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
-
-func remove(list []string, s string) []string {
-	for i, v := range list {
-		if v == s {
-			list = append(list[:i], list[i+1:]...)
-		}
-	}
-	return list
-}
-
 type BenchmarkControllerState struct {
 	// Send "true" to these when it's time to exit
 	//ControlChannels map[string]chan bool
@@ -118,8 +100,8 @@ func (r *ReconcileBenchmark) cleanup(instance *cnsbench.Benchmark) error {
 	log.Info("Deleting", "finalizers", instance.GetFinalizers())
 	log.Info("status", "status", instance.Status)
 	r.stopRoutines(instance)
-	if contains(instance.GetFinalizers(), "RateFinalizer") {
-		instance.SetFinalizers(remove(instance.GetFinalizers(), "RateFinalizer"))
+	if utils.Contains(instance.GetFinalizers(), "RateFinalizer") {
+		instance.SetFinalizers(utils.Remove(instance.GetFinalizers(), "RateFinalizer"))
 		if err := r.client.Update(context.TODO(), instance); err != nil {
 			log.Error(err, "Remove RateFinalizer")
 			return err
@@ -173,7 +155,7 @@ func (r *ReconcileBenchmark) startRates(instance *cnsbench.Benchmark) error {
 	}
 
 	if instance.Status.RunningRates > 0 {
-		if !contains(instance.GetFinalizers(), "RateFinalizer") {
+		if !utils.Contains(instance.GetFinalizers(), "RateFinalizer") {
 			//instance.SetFinalizers(append(instance.GetFinalizers(), "RateFinalizer"))
 		}
 	}
@@ -231,31 +213,25 @@ func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime int64, 
 			log.Error(err, "Error getting pods")
 		} else {
 			for _, pod := range pods.Items {
-				foundParserContainer := false
+				var outputMap map[string]interface{}
 				for _, c := range pod.Spec.Containers {
 					if c.Name == "parser-container" {
-						foundParserContainer = true
+						out, err := utils.ReadContainerLog(pod.Name, "parser-container")
+						if err != nil {
+							log.Error(err, "Reading pod output")
+							continue
+						}
+						lastLine, err := utils.GetLastLine(out)
+						if err != nil {
+							log.Error(err, "Reading getting last line")
+							continue
+						}
+						if err := json.NewDecoder(strings.NewReader(lastLine)).Decode(&outputMap); err != nil {
+							log.Info("out", "out", out)
+							log.Error(err, "Error decoding result")
+							continue
+						}
 					}
-				}
-				if !foundParserContainer {
-					continue
-				}
-
-				out, err := utils.ReadContainerLog(pod.Name, "parser-container")
-				if err != nil {
-					log.Error(err, "Reading pod output")
-					continue
-				}
-				lastLine, err := utils.GetLastLine(out)
-				if err != nil {
-					log.Error(err, "Reading getting last line")
-					continue
-				}
-				var outputMap map[string]interface{}
-				if err := json.NewDecoder(strings.NewReader(lastLine)).Decode(&outputMap); err != nil {
-					log.Info("out", "out", out)
-					log.Error(err, "Error decoding result")
-					continue
 				}
 				workloadResults = append(workloadResults, WorkloadResult{pod.Name, pod.Spec.NodeName, r.getTiming(pod.Name, operationTimes), outputMap})
 			}
@@ -276,6 +252,39 @@ func (r *ReconcileBenchmark) stopRoutines(instance *cnsbench.Benchmark) {
 		r.state[instanceName].ControlChannel <- true
 		r.state[instanceName].ControlChannel <- true
 	}
+}
+
+func (r *ReconcileBenchmark) getCompletedPods(actions []cnsbench.Action, endruntime time.Time) (int, error) {
+	complete := 0
+	for _, a := range actions {
+		ls := &metav1.LabelSelector{}
+		ls = metav1.AddLabelToSelector(ls, "actionname", a.Name)
+		ls = metav1.AddLabelToSelector(ls, "multiinstance", "true")
+
+		selector, err := metav1.LabelSelectorAsSelector(ls)
+		if err != nil {
+			return -1, err
+		}
+		pods := &corev1.PodList{}
+		if err := r.client.List(context.TODO(), pods, &client.ListOptions{Namespace: "default", LabelSelector: selector}); err != nil {
+			return -1, err
+		}
+
+		for _, pod := range pods.Items {
+			if pod.Status.Phase == "Succeeded" {
+				numContainers := len(pod.Status.ContainerStatuses)
+				if numContainers > 0 && pod.Status.ContainerStatuses[numContainers-1].State.Terminated != nil {
+					if !pod.Status.ContainerStatuses[numContainers-1].State.Terminated.FinishedAt.After(endruntime) {
+						log.Info("Pod", "endtime", endruntime, "finshedat", pod.Status.ContainerStatuses[numContainers-1].State.Terminated.FinishedAt.Unix())
+						complete += 1
+					} else {
+						log.Info("Too late!", "endtime", endruntime, "finshedat", pod.Status.ContainerStatuses[numContainers-1].State.Terminated.FinishedAt.Unix())
+					}
+				}
+			}
+		}
+	}
+	return complete, nil
 }
 
 func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Result, error) {
@@ -332,29 +341,112 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 
 	// if we're here, then we're either still running or haven't started yet
 	if instance.Status.State == cnsbench.Running {
-		// If we're running, check to see if we're complete
-		log.Info("Checking status...")
-		complete, err := utils.CheckCompletion(r.client, r.state[instanceName].RunningObjs)
+		// If we're running, and there's a runtime set, check if we've reached the runtime
+		// And if not, check that we still have the correct number of workload instances running.
+
+		runtimeEnd := time.Now()
+		doneRuntime := false
+		if instance.Spec.Runtime != "" {
+			if runtime, err := time.ParseDuration(instance.Spec.Runtime); err != nil {
+				log.Error(err, "Error parsing duration")
+			} else {
+				//log.Info("target completion time", "completion time", time.Unix(instance.Status.InitCompletionTimeUnix, 0).Add(runtime), "now", time.Now().Unix())
+				// Can count runtime from init complete or start.  Only do from start for now...
+				var startTime time.Time
+				if true {
+					startTime = instance.ObjectMeta.CreationTimestamp.Time
+				} else {
+					startTime = instance.Status.InitCompletionTime.Time
+				}
+				log.Info("target completion time", "completion time", startTime.Add(runtime), "now", time.Now().Unix())
+				if time.Now().Before(startTime.Add(runtime)) {
+					log.Info("Not done yet, reconciling instances")
+					if nks, err := r.ReconcileInstances(instance, r.client, instance.Spec.Actions); err != nil {
+						log.Error(err, "Error reconciling workload instances")
+					} else {
+						for _, nk := range nks {
+							r.state[instanceName].RunningObjs = append(r.state[instanceName].RunningObjs, nk)
+						}
+					}
+				} else {
+					log.Info("Runtime done!")
+					runtimeEnd = startTime.Add(runtime)
+					doneRuntime = true
+				}
+			}
+		}
+		if instance.Spec.Runtime == "" || doneRuntime {
+			// If we're running and there's no runtime set, check if the workloads are complete
+			log.Info("Checking status...")
+			complete, err := utils.CheckCompletion(r.client, r.state[instanceName].RunningObjs)
+			if err != nil {
+				log.Error(err, "Error checking Job status")
+				return reconcile.Result{}, err
+			} else if complete {
+				log.Info("Pods are complete, doing outputs")
+				instance.Status.NumCompletedObjs, _ = r.getCompletedPods(instance.Spec.Actions, runtimeEnd)
+				r.doOutputs(instance, instance.ObjectMeta.CreationTimestamp.Unix(), time.Now().Unix())
+				instance.Status.State = cnsbench.Complete
+				instance.Status.CompletionTime = metav1.Now()
+				instance.Status.CompletionTimeUnix = time.Now().Unix()
+				instance.Status.StartTimeUnix = instance.ObjectMeta.CreationTimestamp.Unix()
+				instance.Status.Conditions[0] = cnsbench.BenchmarkCondition{LastTransitionTime: metav1.Now(), Status: "True", Type: "Complete"}
+				if err := r.client.Status().Update(context.TODO(), instance); err != nil {
+					log.Error(err, "Updating instance")
+					return reconcile.Result{}, err
+				}
+				log.Info("Updated status")
+				if err := r.cleanup(instance); err != nil {
+					log.Error(err, "Error cleaning up")
+					return reconcile.Result{}, err
+				}
+			}
+		}
+	} else if instance.Status.State == cnsbench.Initializing {
+		doneInit, err := utils.CheckInit(r.client, instance.Spec.Actions)
 		if err != nil {
-			log.Error(err, "Error checking Job status")
+			log.Error(err, "Error checking init")
 			return reconcile.Result{}, err
-		} else if complete {
-			log.Info("Pods are complete, doing outputs")
-			r.doOutputs(instance, instance.ObjectMeta.CreationTimestamp.Unix(), time.Now().Unix())
-			instance.Status.State = cnsbench.Complete
-			instance.Status.CompletionTime = metav1.Now()
-			instance.Status.CompletionTimeUnix = time.Now().Unix()
-			instance.Status.StartTimeUnix = instance.ObjectMeta.CreationTimestamp.Unix()
-			instance.Status.Conditions[0] = cnsbench.BenchmarkCondition{LastTransitionTime: metav1.Now(), Status: "True", Type: "Complete"}
+		}
+		if doneInit {
+			err = r.startRates(instance)
+			if err != nil {
+				r.stopRoutines(instance)
+				log.Error(err, "")
+				return reconcile.Result{}, err
+			}
+			// if we're here we started everything successfully
+			instance.Status.State = cnsbench.Running
+			instance.Status.InitCompletionTime = metav1.Now()
+			instance.Status.InitCompletionTimeUnix = time.Now().Unix()
 			if err := r.client.Status().Update(context.TODO(), instance); err != nil {
 				log.Error(err, "Updating instance")
+				r.cleanup(instance)
 				return reconcile.Result{}, err
 			}
-			log.Info("Updated status")
-			if err := r.cleanup(instance); err != nil {
-				log.Error(err, "Error cleaning up")
+			if err := r.client.Update(context.TODO(), instance); err != nil {
+				log.Error(err, "Updating instance")
+				r.cleanup(instance)
 				return reconcile.Result{}, err
 			}
+
+			if instance.Spec.Runtime != "" {
+				if runtime, err := time.ParseDuration(instance.Spec.Runtime); err != nil {
+					log.Error(err, "")
+				} else {
+					log.Info("runtime", "runtime", runtime)
+					// If runtime should be started from benchmark creation rather than
+					// when init completes, subtract current time - start time from runtime
+					if true {
+						elapsedTime := time.Now().Sub(instance.ObjectMeta.CreationTimestamp.Time)
+						runtime -= elapsedTime
+						log.Info("times", "runtime", runtime, "elapsed", elapsedTime)
+					}
+					return reconcile.Result{RequeueAfter: runtime}, nil
+				}
+			}
+		} else {
+			return reconcile.Result{RequeueAfter: time.Second*5}, nil
 		}
 	} else {
 		// if we're not running and we're not complete, we must need to be started
@@ -367,14 +459,8 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 			log.Error(err, "")
 			return reconcile.Result{}, err
 		}
-		err = r.startRates(instance)
-		if err != nil {
-			r.stopRoutines(instance)
-			log.Error(err, "")
-			return reconcile.Result{}, err
-		}
 		// if we're here we started everything successfully
-		instance.Status.State = cnsbench.Running
+		instance.Status.State = cnsbench.Initializing
 		instance.Status.Conditions = []cnsbench.BenchmarkCondition{{LastTransitionTime: metav1.Now(), Status: "False", Type: "Complete"}}
 		if err := r.client.Status().Update(context.TODO(), instance); err != nil {
 			log.Error(err, "Updating instance")
@@ -386,6 +472,8 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 			r.cleanup(instance)
 			return reconcile.Result{}, err
 		}
+		// Want to check right away if we're done initializing so requeue
+		return reconcile.Result{Requeue: true}, nil
 	}
 
 	return reconcile.Result{}, nil
@@ -429,7 +517,7 @@ func (r *ReconcileBenchmark) runActions(bm *cnsbench.Benchmark, rateCh chan int,
 func (r *ReconcileBenchmark) runAction(bm *cnsbench.Benchmark, a cnsbench.Action) error {
 	log.Info("Running action", "name", a)
 	if a.SnapshotSpec.VolName != "" {
-		return r.CreateSnapshot(bm, a.SnapshotSpec)
+		return r.CreateSnapshot(bm, a.SnapshotSpec, a.Name)
 	} else if metav1.FormatLabelSelector(&a.DeleteSpec.Selector) != "" {
 		return r.DeleteObj(bm, a.DeleteSpec)
 	} else if a.ScaleSpec.ObjName != "" {

@@ -36,9 +36,21 @@ spec:
                   properties:
                     createObjSpec:
                       properties:
+                        config:
+                          nullable: true
+                          type: string
+                        count:
+                          nullable: true
+                          type: integer
+                        sameVolume:
+                          nullable: true
+                          type: boolean
                         storageClass:
                           nullable: true
                           type: string
+                        syncStart:
+                          nullable: true
+                          type: boolean
                         volName:
                           nullable: true
                           type: string
@@ -46,6 +58,56 @@ spec:
                           type: string
                       required:
                       - workload
+                      type: object
+                    deleteSpec:
+                      properties:
+                        selector:
+                          description: ObjName string `json:"objName"`
+                          properties:
+                            matchExpressions:
+                              description: matchExpressions is a list of label selector
+                                requirements. The requirements are ANDed.
+                              items:
+                                description: A label selector requirement is a selector
+                                  that contains values, a key, and an operator that
+                                  relates the key and values.
+                                properties:
+                                  key:
+                                    description: key is the label key that the selector
+                                      applies to.
+                                    type: string
+                                  operator:
+                                    description: operator represents a key's relationship
+                                      to a set of values. Valid operators are In,
+                                      NotIn, Exists and DoesNotExist.
+                                    type: string
+                                  values:
+                                    description: values is an array of string values.
+                                      If the operator is In or NotIn, the values array
+                                      must be non-empty. If the operator is Exists
+                                      or DoesNotExist, the values array must be empty.
+                                      This array is replaced during a strategic merge
+                                      patch.
+                                    items:
+                                      type: string
+                                    type: array
+                                required:
+                                - key
+                                - operator
+                                type: object
+                              type: array
+                            matchLabels:
+                              additionalProperties:
+                                type: string
+                              description: matchLabels is a map of {key,value} pairs.
+                                A single {key,value} in the matchLabels map is equivalent
+                                to an element of matchExpressions, whose key field
+                                is "key", the operator is "In", and the values array
+                                contains only "value". The requirements are ANDed.
+                              type: object
+                          type: object
+                      required:
+                      - selector
                       type: object
                     name:
                       type: string
@@ -72,7 +134,24 @@ spec:
                     rateName:
                       nullable: true
                       type: string
+                    scaleSpec:
+                      description: 'TODO: need a way of specifying how to scale -
+                        up or down, and by how much'
+                      properties:
+                        objKind:
+                          type: string
+                        objName:
+                          type: string
+                      required:
+                      - objKind
+                      - objName
+                      type: object
                     snapshotSpec:
+                      description: Snapshots and deletions can operate on an individual
+                        object or a selector if a selector, then there may be multiple
+                        objects that match - should specify different policies for
+                        deciding which object to delete, e.g. "newest", "oldest",
+                        "random", ???
                       properties:
                         snapshotClass:
                           type: string
@@ -135,12 +214,8 @@ spec:
                   type: object
                 nullable: true
                 type: array
-              stopAfter:
-                description: Runtime, numactions, ...? For each action have an exit
-                  condition? (or each rate?)
+              runtime:
                 type: string
-            required:
-            - actions
             type: object
           status:
             description: BenchmarkStatus defines the observed state of Benchmark
@@ -178,6 +253,15 @@ spec:
                   - type
                   type: object
                 type: array
+              initCompletionTime:
+                format: date-time
+                nullable: true
+                type: string
+              initCompletionTimeUnix:
+                format: int64
+                type: integer
+              numCompletedObjs:
+                type: integer
               runningActions:
                 description: This doesn't include RuneOnce actions
                 type: integer
@@ -191,6 +275,8 @@ spec:
             required:
             - completionTimeUnix
             - conditions
+            - initCompletionTimeUnix
+            - numCompletedObjs
             - runningActions
             - runningRates
             - startTimeUnix

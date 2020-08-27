@@ -124,12 +124,8 @@ type Action struct {
 
 // BenchmarkSpec defines the desired state of Benchmark
 type BenchmarkSpec struct {
-	//Runtime	int `json:"runtime"`
-
-	// Runtime, numactions, ...?
-	// For each action have an exit condition? (or each rate?)
 	// +optional
-	StopAfter string `json:"stopAfter"`
+	Runtime	string `json:"runtime"`
 
 	Actions []Action `json:"actions"`
 
@@ -171,8 +167,15 @@ type BenchmarkStatus struct {
 	// +nullable
 	CompletionTime metav1.Time `json:"completionTime"`
 
+	// +optional
+	// +nullable
+	InitCompletionTime metav1.Time `json:"initCompletionTime"`
+
 	CompletionTimeUnix int64 `json:"completionTimeUnix"`
 	StartTimeUnix int64 `json:"startTimeUnix"`
+	InitCompletionTimeUnix int64 `json:"initCompletionTimeUnix"`
+
+	NumCompletedObjs int `json:"numCompletedObjs"`
 
 	// This doesn't include RuneOnce actions
 	RunningActions int `json:"runningActions"`

@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	utilptr "k8s.io/utils/pointer"
+        cnsbench "github.com/cnsbench/pkg/apis/cnsbench/v1alpha1"
 )
 
 type NameKind struct {
@@ -26,23 +27,64 @@ type NameKind struct {
 	Kind string
 }
 
+func CheckInit(c client.Client, actions []cnsbench.Action) (bool, error) {
+	for _, a := range actions {
+		labelSelector, err := metav1.ParseToLabelSelector("actionname="+a.Name)
+		if err != nil {
+			return false, err
+		}
+		selector, err := metav1.LabelSelectorAsSelector(labelSelector)
+		if err != nil {
+			return false, err
+		}
+		pods := &corev1.PodList{}
+		if err := c.List(context.TODO(), pods, &client.ListOptions{Namespace: "default", LabelSelector: selector}); err != nil {
+			return false, err
+		}
+		for _, pod := range pods.Items {
+			fmt.Println(pod.Status.Phase)
+			if pod.Status.Phase != "Running" && pod.Status.Phase != "Succeeded" {
+				return false, nil
+			}
+		}
+	}
+	return true, nil
+}
+
 func CheckCompletion(c client.Client, objs []NameKind) (bool, error) {
 	for _, o := range objs {
+		fmt.Println(o.Name, o.Kind)
 		if o.Kind == "Job" {
 			if complete, err := JobComplete(c, o.Name); err != nil || !complete {
+				fmt.Println("Not complete", o.Name)
+				return complete, err
+			}
+		} else if o.Kind == "Pod" {
+			if complete, err := PodComplete(c, o.Name); err != nil || !complete {
+				fmt.Println("Not complete", o.Name)
 				return complete, err
 			}
 		} else if o.Kind == "PersistentVolumeClaim" {
 			if complete, err := PVCComplete(c, o.Name); err != nil || !complete {
+				fmt.Println("Not complete", o.Name)
 				return complete, err
 			}
 		} else if o.Kind == "StatefulSet" {
 			if complete, err := StatefulSetComplete(c, o.Name); err != nil || !complete {
+				fmt.Println("Not complete", o.Name)
 				return complete, err
 			}
 		}
 	}
 	return true, nil
+}
+
+func PodComplete(c client.Client, name string) (bool, error) {
+	pod := &corev1.Pod{}
+	if err := c.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: "default"}, pod); err != nil {
+		return false, err
+	}
+	return pod.Status.Phase == "Succeeded", nil
 }
 
 func StatefulSetComplete(c client.Client, name string) (bool, error) {
@@ -213,6 +255,10 @@ func AddParserContainerGeneric(obj runtime.Object, parserCMName string, logFilen
 	if kind == "Job" {
 		pt := *obj.(*batchv1.Job)
 		addParserContainer(&pt.Spec.Template.Spec, parserCMName, logFilename)
+		return runtime.Object(&pt), nil
+	} else if kind == "Pod" {
+		pt := *obj.(*corev1.Pod)
+		addParserContainer(&pt.Spec, parserCMName, logFilename)
 		return runtime.Object(&pt), nil
 	} else if kind == "StatefulSet" {
 		pt := *obj.(*appsv1.StatefulSet)
