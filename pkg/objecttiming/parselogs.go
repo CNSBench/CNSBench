@@ -76,6 +76,7 @@ func ParseLogs(logs []string, flags uint8) ([]jsondict, error) {
 			saveObjInfo(log, objstore)
 		}
 	}
+	formatResourceNames(results)
 	return results, nil
 }
 
