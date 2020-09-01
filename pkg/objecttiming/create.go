@@ -16,12 +16,12 @@ type createStatus = struct {
 
 /* createEndCrit
 How to identify the last creation log for each supported resource type
-by the contents of the .responseObject.status field
+by the value of .responseObject.status.phase
 */
-var createEndCrit = map[string]createStatus{
-	"pods":                   createStatus{"Running"},
-	"persistentvolumes":      createStatus{"Bound"},
-	"persistentvolumeclaims": createStatus{"Bound"},
+var createEndCrit = map[string][]string{
+	"pods":                   []string{"Running", "Succeeded"},
+	"persistentvolumes":      []string{"Bound"},
+	"persistentvolumeclaims": []string{"Bound"},
 }
 
 func isCreateStart(log auditlog, all []jsondict) bool {
@@ -53,7 +53,7 @@ func isCreateEnd(log auditlog, all []jsondict) int {
 		if err := json.Unmarshal(status, &jsonStatus); err != nil {
 			panic(err)
 		}
-		if !isMatch(jsonStatus, createEndCrit[resource]) {
+		if !isMatch(jsonStatus.Phase, createEndCrit[resource]) {
 			return -1
 		}
 	} else {
@@ -65,13 +65,15 @@ func isCreateEnd(log auditlog, all []jsondict) int {
 
 /* isMatch
 helper for isCreateEnd
-checks if s1 and s2 have the same values
+checks if str matches any string in match
 */
-func isMatch(s1, s2 createStatus) bool {
-	if s1.Phase != s2.Phase {
-		return false
+func isMatch(str string, match []string) bool {
+	for _, s := range match {
+		if str == s {
+			return true
+		}
 	}
-	return true
+	return false
 }
 
 func getCreateStart(log auditlog) jsondict {
