@@ -101,3 +101,37 @@ func getEndIndex(action string, log auditlog, all []jsondict) int {
 	}
 	return -1
 }
+
+/* convertName
+Returns the capitalized version of a resource name used in audit logs
+*/
+func convertName(resource string) string {
+	switch resource {
+	case "deployments":
+		return "Deployment"
+	case "jobs":
+		return "Job"
+	case "persistentvolumeclaims":
+		return "PersistentVolumeClaim"
+	case "persistentvolumes":
+		return "PersistentVolume"
+	case "pods":
+		return "Pod"
+	case "replicasets":
+		return "ReplicaSet"
+	case "statefulsets":
+		return "StatefulSet"
+	default:
+		return resource
+	}
+}
+
+/* formatResourceNames
+Takes a slice of records, formats resource names to their proper
+capitalized versions
+*/
+func formatResourceNames(records []jsondict) {
+	for _, rec := range records {
+		rec["resource"] = convertName(rec["resource"].(string))
+	}
+}
