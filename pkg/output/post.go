@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"bytes"
+	"io/ioutil"
 	"net/http"
 )
 
@@ -24,6 +25,8 @@ func HttpPost(reader *bytes.Reader, url string) error {
 	}
 	defer resp.Body.Close()
 	fmt.Println("Response status", resp.Status)
+	b, err := ioutil.ReadAll(resp.Body)
+	fmt.Println("Response body", string(b))
 
 	return nil
 }
