@@ -27,6 +27,30 @@ type NameKind struct {
 	Kind string
 }
 
+func CleanupScalePods(c client.Client) error {
+	ls := &metav1.LabelSelector{}
+	ls = metav1.AddLabelToSelector(ls, "app", "scale-pod")
+
+	selector, err := metav1.LabelSelectorAsSelector(ls)
+	if err != nil {
+		return err
+	}
+	pods := &corev1.PodList{}
+	if err := c.List(context.TODO(), pods, &client.ListOptions{Namespace: "default", LabelSelector: selector}); err != nil {
+		return err
+	}
+
+	for _, pod := range pods.Items {
+		if pod.Status.Phase == "Succeeded" {
+			if err := c.Delete(context.TODO(), &pod); err != nil{
+				fmt.Println("Error deleting scaling pod", err)
+			}
+		}
+	}
+
+	return nil
+}
+
 func CheckInit(c client.Client, actions []cnsbench.Action) (bool, error) {
 	for _, a := range actions {
 		labelSelector, err := metav1.ParseToLabelSelector("actionname="+a.Name)
@@ -169,6 +193,8 @@ func PVCComplete(c client.Client, name string) (bool, error) {
 func GetLastLine(s string) (string, error) {
 	var lastLine string
 	scanner := bufio.NewScanner(strings.NewReader(s))
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024*10)
 	for scanner.Scan() {
 		lastLine = scanner.Text()
 	}
@@ -273,7 +299,8 @@ func addParserContainer(spec *corev1.PodSpec, parserCMName string, logFilename s
 
 	c := corev1.Container{}
 	c.Name = "parser-container"
-	c.Image = "python:3.8.0"
+	//c.Image = "python:3.8.0"
+	c.Image = "loadbalancer:5000/cnsb/python"
 	c.Command = []string{"/collector/parse-logs.sh", logFilename}
 	//c.Command = []string{"tail", "-f", "/dev/null"}
 	c.VolumeMounts = []corev1.VolumeMount{
