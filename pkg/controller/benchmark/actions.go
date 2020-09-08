@@ -27,6 +27,7 @@ import (
 	snapshotscheme "github.com/kubernetes-csi/external-snapshotter/v2/pkg/client/clientset/versioned/scheme"
 	"k8s.io/apiserver/pkg/storage/names" 
 	snapshotv1beta1 "github.com/kubernetes-csi/external-snapshotter/v2/pkg/apis/volumesnapshot/v1beta1"
+	utilptr "k8s.io/utils/pointer"
 )
 
 func (r *ReconcileBenchmark) createObj(bm *cnsbench.Benchmark, obj runtime.Object, makeOwner bool) error {
@@ -263,7 +264,11 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 		name += "-"+strconv.Itoa(w)
 		meta.NewAccessor().SetName(obj, name)
 	}
-	if err := r.createObj(bm, obj, true); err != nil {
+	makeOwner := true
+	if ns, _ := meta.NewAccessor().Namespace(obj); ns != "default" {
+		makeOwner = false
+	}
+	if err := r.createObj(bm, obj, makeOwner); err != nil {
 		if !errors.IsAlreadyExists(err) {
 			return utils.NameKind{}, err
 		} else {
@@ -280,63 +285,47 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 }
 
 func (r *ReconcileBenchmark) CreateSnapshot(bm *cnsbench.Benchmark, s cnsbench.Snapshot, actionName string) error {
-	/*
-	cm := &corev1.ConfigMap{}
-	kubeconfig := os.Getenv("KUBECONFIG")
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
+	labelSelector, err := metav1.LabelSelectorAsSelector(&s.VolumeSelector)
 	if err != nil {
 		return err
 	}
-	cl, err := client.New(config, client.Options{})
-	if err != nil {
+	pvcs := &corev1.PersistentVolumeClaimList{}
+	if err := r.client.List(context.TODO(), pvcs, &client.ListOptions{Namespace: "default", LabelSelector: labelSelector}); err != nil {
 		return err
 	}
-	err = cl.Get(context.TODO(), client.ObjectKey{Name: "base-snapshot", Namespace: "library"}, cm)
-	if err != nil {
-		log.Error(err, "Error getting ConfigMap", "spec", "base-snapshot")
-		return err
-	}
-
-
-	decode := scheme.Codecs.UniversalDeserializer().Decode
-	objBytes := []byte(cm.Data["base-snapshot.yaml"])
-	obj, _, err := decode(objBytes, nil, nil)
-	if err != nil {
-		log.Error(err, "Error decoding yaml")
-		return err
-	}
-
-	obj.(*snapshotv1beta1.VolumeSnapshot).Spec.VolumeSnapshotClassName = &s.SnapshotClass
-	obj.(*snapshotv1beta1.VolumeSnapshot).Spec.Source.PersistentVolumeClaimName = &s.VolName
-
-	meta.NewAccessor().SetName(obj, name)
-	return r.createObj(bm, obj, false)
-	*/
 
 	snapshotscheme.AddToScheme(scheme.Scheme)
 
-	name := names.NameGenerator.GenerateName(names.SimpleNameGenerator, bm.ObjectMeta.Name+"-snapshot-")
-	snap := snapshotv1beta1.VolumeSnapshot{
-		ObjectMeta: metav1.ObjectMeta {
-			Name: name,
-			Namespace: "default",
-			Labels: map[string]string {
-				"actionname": actionName,
+	// Takes a snapshot of every volume matching the given selector
+	for _, pvc := range pvcs.Items {
+		volName := pvc.Name
+		name := names.NameGenerator.GenerateName(names.SimpleNameGenerator, bm.ObjectMeta.Name+"-snapshot-")
+		snap := snapshotv1beta1.VolumeSnapshot{
+			ObjectMeta: metav1.ObjectMeta {
+				Name: name,
+				Namespace: "default",
+				Labels: map[string]string {
+					"actionname": actionName,
+				},
 			},
-		},
-		Spec: snapshotv1beta1.VolumeSnapshotSpec {
-			VolumeSnapshotClassName: &s.SnapshotClass,
-			Source: snapshotv1beta1.VolumeSnapshotSource {
-				PersistentVolumeClaimName: &s.VolName,
+			Spec: snapshotv1beta1.VolumeSnapshotSpec {
+				VolumeSnapshotClassName: &s.SnapshotClass,
+				Source: snapshotv1beta1.VolumeSnapshotSource {
+					PersistentVolumeClaimName: &volName,
+				},
 			},
-		},
+		}
+
+		if err := r.createObj(bm, runtime.Object(&snap), false); err != nil {
+			log.Error(err, "Creating snapshot")
+		}
 	}
 
-	return r.createObj(bm, runtime.Object(&snap), false)
+	return nil
 }
 
 func (r *ReconcileBenchmark) DeleteObj(bm *cnsbench.Benchmark, d cnsbench.Delete) error {
-	// TODO: Generalize to more than just PVCs and snapshots.  I think we need to get all the api groups,
+	// TODO: Generalize to more than just snapshots.  I think we need to get all the api groups,
 	// then get all the kinds in those groups, then just iterate through those kinds searching
 	// for objects matching the spec
 	// See https://godoc.org/k8s.io/client-go/discovery
@@ -347,22 +336,16 @@ func (r *ReconcileBenchmark) DeleteObj(bm *cnsbench.Benchmark, d cnsbench.Delete
 	if err != nil {
 		return err
 	}
-	//pvcs := &corev1.PersistentVolumeClaimList{}
-	pvcs := &snapshotv1beta1.VolumeSnapshotList{}
-	if err := r.client.List(context.TODO(), pvcs, &client.ListOptions{Namespace: "default", LabelSelector: labelSelector}); err != nil {
+	snaps := &snapshotv1beta1.VolumeSnapshotList{}
+	if err := r.client.List(context.TODO(), snaps, &client.ListOptions{Namespace: "default", LabelSelector: labelSelector}); err != nil {
 		return err
 	}
-	sort.Slice(pvcs.Items, func (i, j int) bool {
-                return pvcs.Items[i].ObjectMeta.CreationTimestamp.Unix() < pvcs.Items[j].ObjectMeta.CreationTimestamp.Unix()
+	sort.Slice(snaps.Items, func (i, j int) bool {
+                return snaps.Items[i].ObjectMeta.CreationTimestamp.Unix() < snaps.Items[j].ObjectMeta.CreationTimestamp.Unix()
         })
-/*
-	for _, p := range pvcs.Items {
-		log.Info("asd", "s", p.ObjectMeta.CreationTimestamp.Unix(), "n", p.Name)
-	}
-*/
-	if len(pvcs.Items) > 0 {
-		log.Info("Deleting first item", "name", pvcs.Items[0].Name, "createtime", pvcs.Items[0].ObjectMeta.CreationTimestamp.Unix())
-		return r.client.Delete(context.TODO(), &pvcs.Items[0])
+	if len(snaps.Items) > 0 {
+		log.Info("Deleting first item", "name", snaps.Items[0].Name, "createtime", snaps.Items[0].ObjectMeta.CreationTimestamp.Unix())
+		return r.client.Delete(context.TODO(), &snaps.Items[0])
 	}
 	log.Info("No objects found")
 
@@ -370,50 +353,73 @@ func (r *ReconcileBenchmark) DeleteObj(bm *cnsbench.Benchmark, d cnsbench.Delete
 }
 
 func (r *ReconcileBenchmark) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale) error {
-	var newSize int32
+	//var newSize int32
 	var err error
-	switch s.ObjKind {
-	case "Job":
-		job := &batchv1.Job{}
-		if err := r.client.Get(context.TODO(), client.ObjectKey{Name: s.ObjName, Namespace: "default"}, job); err != nil {
-			return err
-		}
-		newSize = *job.Spec.Completions + 1
-		job.Spec.Completions = &newSize
-		err = r.client.Update(context.TODO(), job)
-	case "StatefulSet":
-		sts := &appsv1.StatefulSet{}
-		if err := r.client.Get(context.TODO(), client.ObjectKey{Name: s.ObjName, Namespace: "default"}, sts); err != nil {
-			return err
-		}
-		newSize = *sts.Spec.Replicas + 1
-		sts.Spec.Replicas = &newSize
-		err = r.client.Update(context.TODO(), sts)
-	case "Deployment":
-		dep := &appsv1.Deployment{}
-		if err := r.client.Get(context.TODO(), client.ObjectKey{Name: s.ObjName, Namespace: "default"}, dep); err != nil {
-			return err
-		}
-		newSize = *dep.Spec.Replicas + 1
-		dep.Spec.Replicas = &newSize
-		err = r.client.Update(context.TODO(), dep)
-	case "ReplicaSet":
-		rs := &appsv1.ReplicaSet{}
-		if err := r.client.Get(context.TODO(), client.ObjectKey{Name: s.ObjName, Namespace: "default"}, rs); err != nil {
-			return err
-		}
-		newSize = *rs.Spec.Replicas + 1
-		rs.Spec.Replicas = &newSize
-		err = r.client.Update(context.TODO(), rs)
+
+	name := names.NameGenerator.GenerateName(names.SimpleNameGenerator, "scale-pod-")
+	scalePod := &corev1.Pod {
+		ObjectMeta: metav1.ObjectMeta {
+			Name: name,
+			Namespace: "default",
+			Labels: map[string]string {
+				"app": "scale-pod",
+			},
+		},
+		Spec: corev1.PodSpec {
+			RestartPolicy: "Never",
+			Containers: []corev1.Container {
+				{
+					Name: "scale-container",
+					Image: "loadbalancer:5000/cnsb/kubectl",
+					Command: []string{"/scripts/scaleup.sh", s.ObjName},
+					VolumeMounts: []corev1.VolumeMount {
+						{
+							MountPath: "/scripts/",
+							Name: "scale-script",
+						},
+					},
+				},
+			},
+			/*
+			Volumes: []corev1.Volume {
+				{
+					Name: "scale-script",
+					ConfigMap: &corev1.ConfigMapVolumeSource {
+						DefaultMode: utilptr.Int32Ptr(0777),
+						Name: s.ScriptConfigMap,
+					},
+				},
+			},*/
+		},
+	}
+	scaleScriptCM := corev1.ConfigMapVolumeSource {}
+	scaleScriptCM.DefaultMode = utilptr.Int32Ptr(0777)
+	scaleScriptCM.Name = s.ScriptConfigMap
+	scaleScriptVol := corev1.Volume{}
+	scaleScriptVol.Name = "scale-script"
+	scaleScriptVol.ConfigMap = &scaleScriptCM
+	scalePod.Spec.Volumes = append(scalePod.Spec.Volumes, scaleScriptVol)
+
+	if err := controllerutil.SetControllerReference(bm, scalePod, r.scheme); err != nil {
+		log.Error(err, "Error making object child of Benchmark", "name", name)
+		return err
+	}
+	if err := controllerutil.SetOwnerReference(bm, scalePod, r.scheme); err != nil {
+		log.Error(err, "Error making object child of Benchmark")
+		return err
+	}
+
+	if err := r.client.Create(context.TODO(), scalePod); err != nil {
+		return err
 	}
 
 	return err
-
 }
 
 func (r *ReconcileBenchmark) ReconcileInstances(bm *cnsbench.Benchmark, c client.Client, actions []cnsbench.Action) ([]utils.NameKind, error) {
 	cm := &corev1.ConfigMap{}
-	// XXX If we use r.client.Get the configmap is never found - caching issue?
+	// XXX If we use r.client.Get the configmap is never found - caching issue
+	// because the configmaps are in a different namespace?
 	// Workaround is to create a new client and use that to do the lookup
 	kubeconfig := os.Getenv("KUBECONFIG")
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)

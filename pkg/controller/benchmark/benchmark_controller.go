@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"context"
 	"time"
-	"strings"
-	"encoding/json"
+	//"strings"
+	//"encoding/json"
 
 	"github.com/cnsbench/pkg/rates"
 	"github.com/cnsbench/pkg/utils"
@@ -156,7 +156,7 @@ func (r *ReconcileBenchmark) startRates(instance *cnsbench.Benchmark) error {
 
 	if instance.Status.RunningRates > 0 {
 		if !utils.Contains(instance.GetFinalizers(), "RateFinalizer") {
-			//instance.SetFinalizers(append(instance.GetFinalizers(), "RateFinalizer"))
+			instance.SetFinalizers(append(instance.GetFinalizers(), "RateFinalizer"))
 		}
 	}
 
@@ -167,7 +167,8 @@ type WorkloadResult struct {
 	PodName string
 	NodeName string
 	TimeToCreate int64
-	Results map[string]interface{}
+	//Results map[string]interface{}
+	Results string
 }
 
 func (r *ReconcileBenchmark) getTiming(name string, timings []map[string]interface{}) int64 {
@@ -213,7 +214,8 @@ func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime int64, 
 			log.Error(err, "Error getting pods")
 		} else {
 			for _, pod := range pods.Items {
-				var outputMap map[string]interface{}
+				//var outputMap map[string]interface{}
+				var output string
 				for _, c := range pod.Spec.Containers {
 					if c.Name == "parser-container" {
 						out, err := utils.ReadContainerLog(pod.Name, "parser-container")
@@ -226,14 +228,18 @@ func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime int64, 
 							log.Error(err, "Reading getting last line")
 							continue
 						}
+						output = lastLine
+						/*
 						if err := json.NewDecoder(strings.NewReader(lastLine)).Decode(&outputMap); err != nil {
 							log.Info("out", "out", out)
 							log.Error(err, "Error decoding result")
 							continue
-						}
+						}*/
 					}
 				}
-				workloadResults = append(workloadResults, WorkloadResult{pod.Name, pod.Spec.NodeName, r.getTiming(pod.Name, operationTimes), outputMap})
+				//workloadResults = append(workloadResults, WorkloadResult{pod.Name, pod.Spec.NodeName, r.getTiming(pod.Name, operationTimes), outputMap})
+				workloadResults = append(workloadResults, WorkloadResult{pod.Name, pod.Spec.NodeName, r.getTiming(pod.Name, operationTimes), output})
+				//workloadResults = append(workloadResults, WorkloadResult{pod.Name, pod.Spec.NodeName, -1, output})
 			}
 		}
 		results["WorkloadResults"] = workloadResults
@@ -296,6 +302,7 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 	err := r.client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			log.Info("Not found")
 			return reconcile.Result{}, nil
 		}
 		log.Error(err, "Error getting instance")
@@ -305,6 +312,7 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 
 	// Is it being deleted?
 	if instance.GetDeletionTimestamp() != nil {
+		log.Info("Being deleted")
 		if _, exists := r.state[instanceName]; exists {
 			if err := r.cleanup(instance); err != nil {
 				return reconcile.Result{}, err
@@ -343,6 +351,10 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 	if instance.Status.State == cnsbench.Running {
 		// If we're running, and there's a runtime set, check if we've reached the runtime
 		// And if not, check that we still have the correct number of workload instances running.
+
+		if err := utils.CleanupScalePods(r.client); err != nil {
+			log.Error(err, "Cleaning up scale pods")
+		}
 
 		runtimeEnd := time.Now()
 		doneRuntime := false
@@ -515,10 +527,11 @@ func (r *ReconcileBenchmark) runActions(bm *cnsbench.Benchmark, rateCh chan int,
 }
 
 func (r *ReconcileBenchmark) runAction(bm *cnsbench.Benchmark, a cnsbench.Action) error {
-	log.Info("Running action", "name", a)
-	if a.SnapshotSpec.VolName != "" {
+	log.Info("Running action", "name", a, "deletespec", metav1.FormatLabelSelector(&a.DeleteSpec.Selector))
+	if a.SnapshotSpec.SnapshotClass != "" {
 		return r.CreateSnapshot(bm, a.SnapshotSpec, a.Name)
-	} else if metav1.FormatLabelSelector(&a.DeleteSpec.Selector) != "" {
+	} else if metav1.FormatLabelSelector(&a.DeleteSpec.Selector) != "" &&
+		  metav1.FormatLabelSelector(&a.DeleteSpec.Selector) != "<none>" {
 		return r.DeleteObj(bm, a.DeleteSpec)
 	} else if a.ScaleSpec.ObjName != "" {
 		return r.ScaleObj(bm, a.ScaleSpec)

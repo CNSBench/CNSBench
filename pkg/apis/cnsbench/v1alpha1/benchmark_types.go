@@ -53,7 +53,8 @@ type Rate struct {
 // specify different policies for deciding which object to delete, e.g.
 // "newest", "oldest", "random", ???
 type Snapshot struct {
-	VolName string `json:"volName"`
+	//VolName string `json:"volName"`
+	VolumeSelector metav1.LabelSelector `json:"volumeSelector"`
 	SnapshotClass string `json:"snapshotClass"`
 }
 
@@ -65,7 +66,7 @@ type Delete struct {
 // TODO: need a way of specifying how to scale - up or down, and by how much
 type Scale struct {
 	ObjName string `json:"objName"`
-	ObjKind string `json:"objKind"`
+	ScriptConfigMap string `json:"scriptConfigMap"`
 }
 
 type CreateObj struct {
@@ -106,12 +107,16 @@ type Action struct {
 	//ScaleSpec Scale `json:"scaleSpec"`
 
 	// +optional
+	// +nullable
 	CreateObjSpec CreateObj `json:"createObjSpec"`
 	// +optional
+	// +nullable
 	SnapshotSpec Snapshot `json:"snapshotSpec"`
 	// +optional
+	// +nullable
 	ScaleSpec Scale `json:"scaleSpec"`
 	// +optional
+	// +nullable
 	DeleteSpec Delete `json:"deleteSpec"`
 
 	// +optional
