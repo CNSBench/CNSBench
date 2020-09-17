@@ -13,10 +13,11 @@ type OutputStruct struct {
 	Results map[string]interface{}
 	StartTime int64
 	CompletionTime int64
+	InitCompletionTime int64
 }
 
-func Output(parsedOutput map[string]interface{}, outputName string, bm *cnsbench.Benchmark, startTime int64, completionTime int64) error {
-	o := OutputStruct{bm.ObjectMeta.Name, bm.Spec, parsedOutput, startTime, completionTime}
+func Output(parsedOutput map[string]interface{}, outputName string, bm *cnsbench.Benchmark, startTime, completionTime, initCompletionTime int64) error {
+	o := OutputStruct{bm.ObjectMeta.Name, bm.Spec, parsedOutput, startTime, completionTime, initCompletionTime}
 	buf := new(bytes.Buffer)
 	if err := json.NewEncoder(buf).Encode(o); err != nil {
 		return err

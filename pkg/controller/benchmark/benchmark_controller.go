@@ -164,6 +164,7 @@ func (r *ReconcileBenchmark) startRates(instance *cnsbench.Benchmark) error {
 }
 
 type WorkloadResult struct {
+	ActionName string
 	PodName string
 	NodeName string
 	TimeToCreate int64
@@ -186,11 +187,8 @@ func (r *ReconcileBenchmark) getTiming(name string, timings []map[string]interfa
 	return -1
 }
 
-func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime int64, completionTime int64) {
+func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime, completionTime, initCompletionTime int64) {
 	log.Info("Do outputs")
-	results := make(map[string]interface{})
-
-	workloadResults := []WorkloadResult{}
 
 	// TODO: how to specify url in benchmark spec?
 	auditLogs, err := utils.GetAuditLogs(startTime, completionTime, "http://loadbalancer:9200")
@@ -205,45 +203,58 @@ func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime int64, 
 		log.Error(err, "Error parsing audit logs")
 	}
 
+	allResults := []WorkloadResult{}
 	for _, action := range bm.Spec.Actions {
-		pods := &corev1.PodList{}
-		opts := []client.ListOption {
-			client.InNamespace("default"),
+		workloadResults := []WorkloadResult{}
+		ls := &metav1.LabelSelector{}
+		ls = metav1.AddLabelToSelector(ls, "actionname", action.Name)
+		selector, err := metav1.LabelSelectorAsSelector(ls)
+		if err != nil {
+			log.Error(err, "Error making selector")
+			continue
 		}
-		if err := r.client.List(context.TODO(), pods, opts...); err != nil {
+
+		pods := &corev1.PodList{}
+		if err := r.client.List(context.TODO(), pods, &client.ListOptions{Namespace: "default", LabelSelector: selector}); err != nil {
 			log.Error(err, "Error getting pods")
-		} else {
-			for _, pod := range pods.Items {
-				//var outputMap map[string]interface{}
-				var output string
-				for _, c := range pod.Spec.Containers {
-					if c.Name == "parser-container" {
-						out, err := utils.ReadContainerLog(pod.Name, "parser-container")
-						if err != nil {
-							log.Error(err, "Reading pod output")
-							continue
-						}
-						lastLine, err := utils.GetLastLine(out)
-						if err != nil {
-							log.Error(err, "Reading getting last line")
-							continue
-						}
-						output = lastLine
-						/*
-						if err := json.NewDecoder(strings.NewReader(lastLine)).Decode(&outputMap); err != nil {
-							log.Info("out", "out", out)
-							log.Error(err, "Error decoding result")
-							continue
-						}*/
+			continue
+		}
+		for _, pod := range pods.Items {
+			log.Info("Getting output", "pod", pod.Name, "action", action.Name)
+			for _, c := range pod.Spec.Containers {
+				if c.Name == "parser-container" {
+					out, err := utils.ReadContainerLog(pod.Name, "parser-container")
+					if err != nil {
+						log.Error(err, "Reading pod output")
+						continue
 					}
+					lastLine, err := utils.GetLastLine(out)
+					if err != nil {
+						log.Error(err, "Reading getting last line")
+						continue
+					}
+					log.Info("Adding output to lists")
+					workloadResults = append(workloadResults, WorkloadResult{action.Name, pod.Name, pod.Spec.NodeName, r.getTiming(pod.Name, operationTimes), lastLine})
+					//allResults = append(allResults, WorkloadResult{action.Name, pod.Name, pod.Spec.NodeName, r.getTiming(pod.Name, operationTimes), lastLine})
+					log.Info("Last line length", "len", len(lastLine))
+					allResults = append(allResults, WorkloadResult{action.Name, pod.Name, pod.Spec.NodeName, -1, lastLine})
 				}
-				//workloadResults = append(workloadResults, WorkloadResult{pod.Name, pod.Spec.NodeName, r.getTiming(pod.Name, operationTimes), outputMap})
-				workloadResults = append(workloadResults, WorkloadResult{pod.Name, pod.Spec.NodeName, r.getTiming(pod.Name, operationTimes), output})
-				//workloadResults = append(workloadResults, WorkloadResult{pod.Name, pod.Spec.NodeName, -1, output})
 			}
 		}
-		results["WorkloadResults"] = workloadResults
-		if err := output.Output(results, action.Outputs.OutputName, bm, startTime, completionTime); err != nil {
+		if action.Outputs.OutputName != "" {
+			results := make(map[string]interface{})
+			results["WorkloadResults"] = workloadResults
+			if err := output.Output(results, action.Outputs.OutputName, bm, startTime, completionTime, initCompletionTime); err != nil {
+				log.Error(err, "Error sending outputs")
+			}
+		}
+	}
+	
+	if bm.Spec.AllResultsOutput != "" {
+		log.Info("Output size", "size", len(allResults))
+		results := make(map[string]interface{})
+		results["AllResults"] = allResults
+		if err := output.Output(results, bm.Spec.AllResultsOutput, bm, startTime, completionTime, initCompletionTime); err != nil {
 			log.Error(err, "Error sending outputs")
 		}
 	}
@@ -397,7 +408,7 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 			} else if complete {
 				log.Info("Pods are complete, doing outputs")
 				instance.Status.NumCompletedObjs, _ = r.getCompletedPods(instance.Spec.Actions, runtimeEnd)
-				r.doOutputs(instance, instance.ObjectMeta.CreationTimestamp.Unix(), time.Now().Unix())
+				r.doOutputs(instance, instance.ObjectMeta.CreationTimestamp.Unix(), time.Now().Unix(), instance.Status.InitCompletionTimeUnix)
 				instance.Status.State = cnsbench.Complete
 				instance.Status.CompletionTime = metav1.Now()
 				instance.Status.CompletionTimeUnix = time.Now().Unix()
@@ -419,6 +430,9 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 		if err != nil {
 			log.Error(err, "Error checking init")
 			return reconcile.Result{}, err
+		}
+		if instance.Spec.Runtime != "" {
+			doneInit = true
 		}
 		if doneInit {
 			err = r.startRates(instance)

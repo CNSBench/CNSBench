@@ -53,8 +53,7 @@ type Rate struct {
 // specify different policies for deciding which object to delete, e.g.
 // "newest", "oldest", "random", ???
 type Snapshot struct {
-	//VolName string `json:"volName"`
-	VolumeSelector metav1.LabelSelector `json:"volumeSelector"`
+	ActionName string `json:"actionName"`
 	SnapshotClass string `json:"snapshotClass"`
 }
 
@@ -74,15 +73,19 @@ type CreateObj struct {
 
 	// +optional
 	// +nullable
-	VolName string `json:"volName"`
+	Vars map[string]string `json:"vars"`
 
 	// +optional
 	// +nullable
-	StorageClass string `json:"storageClass"`
+	//VolName string `json:"volName"`
 
 	// +optional
 	// +nullable
-	Config string `json:"config"`
+	//StorageClass string `json:"storageClass"`
+
+	// +optional
+	// +nullable
+	//Config string `json:"config"`
 
 	// +optional
 	// +nullable
@@ -94,10 +97,11 @@ type CreateObj struct {
 
 	// +optional
 	// +nullable
-	SameVolume bool `json:"sameVolume"`
+	//SameVolume bool `json:"sameVolume"`
 
-	// TODO: Maybe add a generic "workload params" string->string map
-	// that lets users pass arbitrary parameters to the workload?
+	// +optional
+	// +nullable
+	SyncGroup string `json:"syncGroup"`
 }
 
 type Action struct {
@@ -137,6 +141,10 @@ type BenchmarkSpec struct {
 	// +optional
 	// +nullable
 	Rates []Rate `json:"rates"`
+
+	// +optional
+	// +nullable
+	AllResultsOutput string `json:"allResultsOutput"`
 
 	// +optional
 	Outputs []Output `json:"outputs"`

@@ -332,30 +332,34 @@ func addParserContainer(spec *corev1.PodSpec, parserCMName string, logFilename s
 	spec.Volumes = append(spec.Volumes, collectorVol)
 }
 
-func AddSyncContainerGeneric(obj runtime.Object, count int, actionName string) (runtime.Object, error) {
+func AddSyncContainerGeneric(obj runtime.Object, count int, actionName string, syncGroup string) (runtime.Object, error) {
 	kind, err := meta.NewAccessor().Kind(obj)
 	if err != nil {
 		return nil, err
 	}
 	if kind == "Job" {
 		pt := *obj.(*batchv1.Job)
-		addSyncContainer(&pt.Spec.Template.Spec, count, actionName)
+		addSyncContainer(&pt.Spec.Template.Spec, count, actionName, syncGroup)
 		return runtime.Object(&pt), nil
 	} else if kind == "StatefulSet" {
 		pt := *obj.(*appsv1.StatefulSet)
-		addSyncContainer(&pt.Spec.Template.Spec, count, actionName)
+		addSyncContainer(&pt.Spec.Template.Spec, count, actionName, syncGroup)
 		return runtime.Object(&pt), nil
 	}
 	return obj, nil
 }
 
-func addSyncContainer(spec *corev1.PodSpec, count int, actionName string) {
+func addSyncContainer(spec *corev1.PodSpec, count int, actionName string, syncGroup string) {
 	numContainers := len(spec.InitContainers)
 
 	c := corev1.Container{}
 	c.Name = "sync-container"
 	c.Image = "dwdraju/alpine-curl-jq"
+	//c.Command = []string{"/scripts/ready.sh", "actionname%3D"+actionName, strconv.Itoa(numContainers*count)}
 	c.Command = []string{"/scripts/ready.sh", "actionname%3D"+actionName, strconv.Itoa(numContainers*count)}
+	if syncGroup != "" {
+		c.Command = append(c.Command, "syncgroup%3D"+syncGroup)
+	}
 	c.VolumeMounts = []corev1.VolumeMount{
 		{
 			MountPath: "/scripts/",

@@ -11,7 +11,7 @@ import (
 	cnsbench "github.com/cnsbench/pkg/apis/cnsbench/v1alpha1"
 	"github.com/cnsbench/pkg/utils"
 
-        appsv1 "k8s.io/api/apps/v1"
+        //appsv1 "k8s.io/api/apps/v1"
         corev1 "k8s.io/api/core/v1"
         batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -149,6 +149,18 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 }
 
 func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k string, isMultiInstanceObj bool, actionName string, a cnsbench.CreateObj, cm *corev1.ConfigMap, objBytes []byte) (utils.NameKind, error) {
+	// Replace vars in workload spec with values from benchmark object
+	cmString := string(objBytes)
+	for k, v := range a.Vars {
+		log.Info("Searching for var", "var", k, "replacement", v)
+		// If we're doing > 1 instance and this is an object that's getting repeated,
+		cmString = strings.ReplaceAll(cmString, "{{"+k+"}}", v)
+	}
+	cmString = strings.ReplaceAll(cmString, "{{ACTION_NAME}}", actionName)
+	cmString = strings.ReplaceAll(cmString, "{{INSTANCE_NUM}}", strconv.Itoa(w))
+
+	// Decode the yaml object from the workload spec
+	objBytes = []byte(cmString)
 	decode := scheme.Codecs.UniversalDeserializer().Decode
 	obj, _, err := decode(objBytes, nil, nil)
 	if err != nil {
@@ -156,90 +168,46 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 		return utils.NameKind{}, err
 	}
 
+	// Get the object's kind
 	kind, err := meta.NewAccessor().Kind(obj)
 	log.Info("KIND", "KIND", kind)
-	// TODO: Instead of hardcoding config.yaml, use annotation in workload spec
-	if kind == "ConfigMap" && k == "config.yaml" && a.Config != "" {
-		// User provided their own config, don't create the default one from the workload
-		return utils.NameKind{}, nil
-	}
-	if kind == "PersistentVolumeClaim" {
-		obj.(*corev1.PersistentVolumeClaim).Spec.StorageClassName = &a.StorageClass
-		if a.VolName == "" {
-			obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name = "test-vol"
-		} else {
-			obj.(*corev1.PersistentVolumeClaim).ObjectMeta.Name = a.VolName
-		}
-	} else if kind == "Job" {
-		for i, v := range obj.(*batchv1.Job).Spec.Template.Spec.Volumes {
-			// TODO: Use annotation instead of hardcoding volume ID
-			if v.Name == "data" {
-				if a.VolName == "" {
-					obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = "test-vol"
-				} else {
-					obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName = a.VolName
-				}
-				// TODO: Instead of hardcoding pvc.yaml, use annotation in workload spec to indicate which yaml file corresponds
-				// to the volume used here.  Then check if that is in the multi instance list
-				if a.Count > 0 && isMultiInstanceObj {
-					obj.(*batchv1.Job).Spec.Template.Spec.Volumes[i].PersistentVolumeClaim.ClaimName += "-"+strconv.Itoa(w)
+
+	// Add parser container, if the object is the right kind and listed in parseWorklods annotation
+	if kind == "Job" || kind == "Pod" || kind == "StatefulSet" {
+		if parseWorkloads, exists := cm.ObjectMeta.Annotations["parseWorkloads"]; exists && strings.Contains(parseWorkloads, k) {
+			parser, parserExists := cm.ObjectMeta.Annotations["parser"]
+			outfile, outfileExists := cm.ObjectMeta.Annotations["outputFile"]
+			if parserExists && outfileExists {
+				obj, err = utils.AddParserContainerGeneric(obj, parser, outfile)
+				if err != nil {
+					log.Error(err, "Error adding parser container", cm.ObjectMeta.Annotations)
 				}
 			}
-		}
-		for n, _ := range obj.(*batchv1.Job).Spec.Template.Spec.InitContainers {
-			obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env, corev1.EnvVar{Name: "INSTANCE_NUM", Value: strconv.Itoa(w)})
-		}
-		parser, parserExists := cm.ObjectMeta.Annotations["parser"]
-		outfile, outfileExists := cm.ObjectMeta.Annotations["outputFile"]
-		if parserExists && outfileExists {
-			obj, err = utils.AddParserContainerGeneric(obj, parser, outfile)
-			if err != nil {
-				log.Error(err, "Error adding parser container", cm.ObjectMeta.Annotations)
-			}
-		}
-	} else if kind == "Pod" {
-		for i, v := range obj.(*corev1.Pod).Spec.Volumes {
-			// TODO: Use annotation instead of hardcoding volume ID
-			if v.Name == "data" {
-				if a.VolName == "" {
-					obj.(*corev1.Pod).Spec.Volumes[i].PersistentVolumeClaim.ClaimName = "test-vol"
-				} else {
-					obj.(*corev1.Pod).Spec.Volumes[i].PersistentVolumeClaim.ClaimName = a.VolName
-				}
-				// TODO: Instead of hardcoding pvc.yaml, use annotation in workload spec to indicate which yaml file corresponds
-				// to the volume used here.  Then check if that is in the multi instance list
-				if a.Count > 0 && isMultiInstanceObj {
-					obj.(*corev1.Pod).Spec.Volumes[i].PersistentVolumeClaim.ClaimName += "-"+strconv.Itoa(w)
-				}
-			}
-		}
-		parser, parserExists := cm.ObjectMeta.Annotations["parser"]
-		outfile, outfileExists := cm.ObjectMeta.Annotations["outputFile"]
-		if parserExists && outfileExists {
-			obj, err = utils.AddParserContainerGeneric(obj, parser, outfile)
-			if err != nil {
-				log.Error(err, "Error adding parser container", cm.ObjectMeta.Annotations)
-			}
-		}
-	} else if kind == "StatefulSet" {
-		for i, v := range obj.(*appsv1.StatefulSet).Spec.VolumeClaimTemplates {
-			if v.Name == "data" {
-				obj.(*appsv1.StatefulSet).Spec.VolumeClaimTemplates[i].Spec.StorageClassName = &a.StorageClass
-			}
-		}
-		obj, err = utils.AddParserContainerGeneric(obj, cm.ObjectMeta.Annotations["parser"], cm.ObjectMeta.Annotations["outputFile"])
-		if err != nil {
-			log.Error(err, "Error adding parser container", cm.ObjectMeta.Annotations)
 		}
 	}
 
-	// Add actionname label to object
+	// Add INSTANCE_NUM env to init containers, so multiple workload instances can coordinate initialization
+	// TODO: Also do this for other kinds of object.  Ideally do it generically for any kind with a PodSpec
+	if kind == "Job" {
+		for n, _ := range obj.(*batchv1.Job).Spec.Template.Spec.InitContainers {
+			obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env, corev1.EnvVar{Name: "INSTANCE_NUM", Value: strconv.Itoa(w)})
+		}
+	} else if kind == "Pod" {
+		for n, _ := range obj.(*corev1.Pod).Spec.InitContainers {
+			obj.(*corev1.Pod).Spec.InitContainers[n].Env = append(obj.(*corev1.Pod).Spec.InitContainers[n].Env, corev1.EnvVar{Name: "INSTANCE_NUM", Value: strconv.Itoa(w)})
+		}
+	}
+
+	// Add actionname and multiinstance labels to object
 	labels, err := meta.NewAccessor().Labels(obj)
 	if err != nil {
 		log.Error(err, "Error getting labels")
 	}
 	if labels == nil {
 		labels = make(map[string]string)
+	}
+	if a.SyncGroup != "" {
+		labels["syncgroup"] = a.SyncGroup
 	}
 	labels["actionname"] = actionName
 	labels["multiinstance"] = strconv.FormatBool(isMultiInstanceObj)
@@ -248,26 +216,35 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 	obj, err = utils.AddLabelsGeneric(obj, labels)
 
 	// Add use config if given
-	if a.Config != "" {
-		obj, err = utils.UseUserConfig(obj, a.Config)
-	}
+	//if a.Config != "" {
+	//	obj, err = utils.UseUserConfig(obj, a.Config)
+	//}
 
 	// Add sync container if sync start requested
 	// TODO: Make this an annotation rather than field in the benchmark spec
 	if isMultiInstanceObj {
-		obj, err = utils.AddSyncContainerGeneric(obj, a.Count, actionName)
+		obj, err = utils.AddSyncContainerGeneric(obj, a.Count, actionName, a.SyncGroup)
 	}
 
+	// The I/O workload author should use {{INSTANCE_NUM}} as part of an
+	// object's name if they want to create multiple instances of that object
+	// when count > 0.  Otherwise each object will have the same name, so
+	// the create fails (we catch the "AlreadyExists" error and ignore)
 	name, err := meta.NewAccessor().Name(obj)
 	kind, err = meta.NewAccessor().Kind(obj)
+	/*
 	if a.Count > 0 && isMultiInstanceObj {
 		name += "-"+strconv.Itoa(w)
 		meta.NewAccessor().SetName(obj, name)
-	}
+	}*/
+
+	// Ownership can't transcend namespaces
 	makeOwner := true
 	if ns, _ := meta.NewAccessor().Namespace(obj); ns != "default" {
 		makeOwner = false
 	}
+
+	// Make the actual object
 	if err := r.createObj(bm, obj, makeOwner); err != nil {
 		if !errors.IsAlreadyExists(err) {
 			return utils.NameKind{}, err
@@ -276,8 +253,9 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 			return utils.NameKind{}, nil
 		}
 	}
-	// TODO: Fix this hack
-	if k == "workload.yaml" {
+
+	// TODO: Need a better way of knowing what workload objects to wait for completion
+	if parseWorkloads, exists := cm.ObjectMeta.Annotations["parseWorkloads"]; exists && strings.Contains(parseWorkloads, k) {
 		return utils.NameKind{name, kind}, nil
 	}
 
@@ -285,12 +263,14 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 }
 
 func (r *ReconcileBenchmark) CreateSnapshot(bm *cnsbench.Benchmark, s cnsbench.Snapshot, actionName string) error {
-	labelSelector, err := metav1.LabelSelectorAsSelector(&s.VolumeSelector)
+	ls := &metav1.LabelSelector{}
+	ls = metav1.AddLabelToSelector(ls, "actionname", s.ActionName)
+	selector, err := metav1.LabelSelectorAsSelector(ls)
 	if err != nil {
 		return err
 	}
 	pvcs := &corev1.PersistentVolumeClaimList{}
-	if err := r.client.List(context.TODO(), pvcs, &client.ListOptions{Namespace: "default", LabelSelector: labelSelector}); err != nil {
+	if err := r.client.List(context.TODO(), pvcs, &client.ListOptions{Namespace: "default", LabelSelector: selector}); err != nil {
 		return err
 	}
 
@@ -380,16 +360,6 @@ func (r *ReconcileBenchmark) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale) 
 					},
 				},
 			},
-			/*
-			Volumes: []corev1.Volume {
-				{
-					Name: "scale-script",
-					ConfigMap: &corev1.ConfigMapVolumeSource {
-						DefaultMode: utilptr.Int32Ptr(0777),
-						Name: s.ScriptConfigMap,
-					},
-				},
-			},*/
 		},
 	}
 	scaleScriptCM := corev1.ConfigMapVolumeSource {}
