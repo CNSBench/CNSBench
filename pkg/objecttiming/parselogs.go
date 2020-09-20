@@ -42,6 +42,9 @@ func ParseLogs(logs []string, flags uint8) ([]jsondict, error) {
 			} else if i := isCreateEnd(log, ongoing); i >= 0 {
 				record := ongoing[i]
 				setEndTime(log, record)
+				if log.ObjectRef.Resource == "persistentvolumeclaims" {
+					record["pvName"] = log.ResponseObject.Spec.VolumeName
+				}
 				ongoing = append(ongoing[:i], ongoing[i+1:]...)
 				results = append(results, record)
 				continue
@@ -71,31 +74,81 @@ func ParseLogs(logs []string, flags uint8) ([]jsondict, error) {
 				continue
 			}
 		}
+		// Pod/PVC additional timestamps
+		if flags&ParsePVCPod != 0 {
+			// Time PVC is attached to Pod (attachTime)
+			if isAttachVolumeEvent(log) {
+				setAttachTime(log, ongoing)
+				continue
+			}
+			// Time Pod status changed to ContainerCreating (containerTime)
+			if isContainerCreatingStatus(log) {
+				setContainerTime(log, ongoing)
+				continue
+			}
+		}
 		// Save relevant object info, if applicable
 		if isGetCreateRequest(log) {
 			saveObjInfo(log, objstore)
 		}
 	}
+	// For each PVC-bound Pod, boundTime = the matching PVC create log's endTime
+	if flags&ParsePVCPod != 0 {
+		boundTimes(results)
+	}
+	// Calculate duration & other deltas
+	calculateDeltas(results, flags)
+	// Convert resource names to capitalized names
 	formatResourceNames(results)
 	return results, nil
 }
 
 /* setEndTime
-Calculates and records the duration of the action stored in record.
+Records the end time of the action stored in record.
 Also records any labels that the object may have.
 */
 func setEndTime(log auditlog, record jsondict) {
-	// Calculate duration
-	startTime := record["startTime"].(time.Time)
 	endTime := getEndTime(log)
-	duration := timeDiff(startTime, endTime)
-	// Delete startTime from the record
-	delete(record, "startTime")
-	// Set duration in the record
-	record["duration"] = duration
+	record["endTime"] = endTime
 	// Also record object labels (if there are any) at this point
 	metadata := log.ResponseObject.Metadata
 	if metadata.Labels != nil {
 		record["labels"] = metadata.Labels
+	}
+}
+
+/* calculateDeltas
+Calculates duration of each log (endTime - startTime).
+For Pods with PVCs, if ParsePVCPod flag is set, calculates relevant deltas.
+*/
+func calculateDeltas(results []jsondict, flags uint8) {
+	for _, result := range results {
+		startTime := result["startTime"].(time.Time)
+		endTime := result["endTime"].(time.Time)
+		// Calculate intermediate deltas for Pod/PVC timings
+		if flags&ParsePVCPod != 0 {
+			if at, ok := result["attachTime"]; ok {
+				attachTime := at.(time.Time)
+				boundTime := result["boundTime"].(time.Time)
+				containerTime := result["containerTime"].(time.Time)
+				// 1:startTime 2:boundTime 3:attachTime 4:containerTime 5:endTime
+				result["delta12"] = timeDiff(startTime, boundTime)
+				result["delta23"] = timeDiff(boundTime, attachTime)
+				result["delta34"] = timeDiff(attachTime, containerTime)
+				result["delta45"] = timeDiff(containerTime, endTime)
+				result["delta14"] = timeDiff(startTime, containerTime)
+				// delta15 = duration
+			}
+		}
+		// Calculate duration
+		duration := timeDiff(startTime, endTime)
+		result["duration"] = duration
+		// Cleanup
+		delete(result, "startTime")
+		delete(result, "endTime")
+		delete(result, "attachTime")
+		delete(result, "boundTime")
+		delete(result, "containerTime")
+		delete(result, "pvName")
 	}
 }

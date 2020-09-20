@@ -88,11 +88,20 @@ func getEndIndex(action string, log auditlog, all []jsondict) int {
 	// Get the name, resource, namespace of log
 	name, resource, namespace := getIdentification(log)
 	// Search array for a record that matches the name, resource, namespace
+	return findLog(action, name, resource, namespace, all)
+}
+
+/* findLog
+Returns the index of the (not yet ended) log of an object for the given action.
+Object is identified by name, resource, and namespace.
+*/
+func findLog(action, name, resource, namespace string, all []jsondict) int {
+	// Search array for a record that matches the name, resource, namespace
 	for i := len(all) - 1; i >= 0; i-- {
 		if all[i]["action"] == action &&
 			objectMatch(all[i], name, resource, namespace) {
-			// Only return the index if duration hasn't been set yet
-			if all[i]["duration"] == nil {
+			// Only return the index if endTime hasn't been set yet
+			if all[i]["endTime"] == nil {
 				return i
 			} else {
 				return -1

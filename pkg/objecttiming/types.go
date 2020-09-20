@@ -15,7 +15,7 @@ type auditlog = struct {
 	RequestReceivedTimestamp string
 	ObjectRef      objref
 	ResponseStatus struct{ Code int16 }
-	RequestObject  struct{ Status json.RawMessage }
+	RequestObject  reqobject
 	ResponseObject respobject
 }
 
@@ -24,6 +24,18 @@ type objref = struct {
 	Namespace,
 	Name,
 	Subresource string
+}
+
+type reqobject = struct {
+	Status          json.RawMessage
+	InvolvedObject  involvedobject
+	Reason, Message string
+}
+
+type involvedobject = struct {
+	Kind,
+	Namespace,
+	Name string
 }
 
 type respobject = struct {
@@ -38,4 +50,5 @@ type respobject = struct {
 type spec = struct {
 	Replicas    uint8
 	Parallelism uint8
+	VolumeName  string
 }

@@ -4,6 +4,7 @@ package objecttiming
 const (
 	ParseCreate = 1 << iota
 	ParseScale
+	ParsePVCPod
 	ParseDelete
 	ParseResize
 )
