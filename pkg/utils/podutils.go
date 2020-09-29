@@ -384,6 +384,11 @@ func AddLabelsGeneric(obj runtime.Object, labels map[string]string) (runtime.Obj
 	}
 	if kind == "Job" {
 		pt := *obj.(*batchv1.Job)
+		if pt.Spec.Template.ObjectMeta.Labels != nil {
+			for k, v := range pt.Spec.Template.ObjectMeta.Labels {
+				labels[k] = v
+			}
+		}
 		addLabels(&pt.Spec.Template.ObjectMeta, labels)
 		return runtime.Object(&pt), nil
 	} else if kind == "StatefulSet" {
