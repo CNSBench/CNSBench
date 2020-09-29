@@ -149,6 +149,12 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 }
 
 func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k string, isMultiInstanceObj bool, actionName string, a cnsbench.CreateObj, cm *corev1.ConfigMap, objBytes []byte) (utils.NameKind, error) {
+	var count int
+	if a.Count == 0 {
+		count = 1
+	} else {
+		count = a.Count
+	}
 	// Replace vars in workload spec with values from benchmark object
 	cmString := string(objBytes)
 	for k, v := range a.Vars {
@@ -157,7 +163,9 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 		cmString = strings.ReplaceAll(cmString, "{{"+k+"}}", v)
 	}
 	cmString = strings.ReplaceAll(cmString, "{{ACTION_NAME}}", actionName)
+	cmString = strings.ReplaceAll(cmString, "{{ACTION_NAME_CAPS}}", strings.ToUpper(actionName))
 	cmString = strings.ReplaceAll(cmString, "{{INSTANCE_NUM}}", strconv.Itoa(w))
+	cmString = strings.ReplaceAll(cmString, "{{NUM_INSTANCES}}", strconv.Itoa(count))
 
 	// Decode the yaml object from the workload spec
 	objBytes = []byte(cmString)
@@ -191,10 +199,20 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 	if kind == "Job" {
 		for n, _ := range obj.(*batchv1.Job).Spec.Template.Spec.InitContainers {
 			obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env, corev1.EnvVar{Name: "INSTANCE_NUM", Value: strconv.Itoa(w)})
+			obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env, corev1.EnvVar{Name: "NUM_INSTANCES", Value: strconv.Itoa(count)})
+		}
+		for n, _ := range obj.(*batchv1.Job).Spec.Template.Spec.Containers {
+			obj.(*batchv1.Job).Spec.Template.Spec.Containers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.Containers[n].Env, corev1.EnvVar{Name: "INSTANCE_NUM", Value: strconv.Itoa(w)})
+			obj.(*batchv1.Job).Spec.Template.Spec.Containers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.Containers[n].Env, corev1.EnvVar{Name: "NUM_INSTANCES", Value: strconv.Itoa(count)})
 		}
 	} else if kind == "Pod" {
 		for n, _ := range obj.(*corev1.Pod).Spec.InitContainers {
 			obj.(*corev1.Pod).Spec.InitContainers[n].Env = append(obj.(*corev1.Pod).Spec.InitContainers[n].Env, corev1.EnvVar{Name: "INSTANCE_NUM", Value: strconv.Itoa(w)})
+			obj.(*corev1.Pod).Spec.InitContainers[n].Env = append(obj.(*corev1.Pod).Spec.InitContainers[n].Env, corev1.EnvVar{Name: "NUM_INSTANCES", Value: strconv.Itoa(count)})
+		}
+		for n, _ := range obj.(*corev1.Pod).Spec.Containers {
+			obj.(*corev1.Pod).Spec.Containers[n].Env = append(obj.(*corev1.Pod).Spec.Containers[n].Env, corev1.EnvVar{Name: "INSTANCE_NUM", Value: strconv.Itoa(w)})
+			obj.(*corev1.Pod).Spec.Containers[n].Env = append(obj.(*corev1.Pod).Spec.Containers[n].Env, corev1.EnvVar{Name: "NUM_INSTANCES", Value: strconv.Itoa(count)})
 		}
 	}
 
