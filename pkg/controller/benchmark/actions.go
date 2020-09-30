@@ -101,18 +101,7 @@ func (r *ReconcileBenchmark) RunInstance(bm *cnsbench.Benchmark, cm *corev1.Conf
 func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.CreateObj, actionName string) ([]utils.NameKind, error) {
 	cm := &corev1.ConfigMap{}
 
-	// XXX If we use r.client.Get the configmap is never found - caching issue?
-	// Workaround is to create a new client and use that to do the lookup
-	kubeconfig := os.Getenv("KUBECONFIG")
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return []utils.NameKind{}, err
-	}
-	cl, err := client.New(config, client.Options{})
-	if err != nil {
-		return []utils.NameKind{}, err
-	}
-	err = cl.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: "library"}, cm)
+	err := r.client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: "library"}, cm)
 	if err != nil {
 		log.Error(err, "Error getting ConfigMap", "spec", a.Workload)
 		return []utils.NameKind{}, err
@@ -395,18 +384,6 @@ func (r *ReconcileBenchmark) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale) 
 
 func (r *ReconcileBenchmark) ReconcileInstances(bm *cnsbench.Benchmark, c client.Client, actions []cnsbench.Action) ([]utils.NameKind, error) {
 	cm := &corev1.ConfigMap{}
-	// XXX If we use r.client.Get the configmap is never found - caching issue
-	// because the configmaps are in a different namespace?
-	// Workaround is to create a new client and use that to do the lookup
-	kubeconfig := os.Getenv("KUBECONFIG")
-	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
-	if err != nil {
-		return []utils.NameKind{}, err
-	}
-	cl, err := client.New(config, client.Options{})
-	if err != nil {
-		return []utils.NameKind{}, err
-	}
 
 	ret := []utils.NameKind{}
 	for _, a := range actions {
@@ -415,7 +392,7 @@ func (r *ReconcileBenchmark) ReconcileInstances(bm *cnsbench.Benchmark, c client
 		}
 		fmt.Println(a)
 
-		err = cl.Get(context.TODO(), client.ObjectKey{Name: a.CreateObjSpec.Workload, Namespace: "library"}, cm)
+		err := r.client.Get(context.TODO(), client.ObjectKey{Name: a.CreateObjSpec.Workload, Namespace: "library"}, cm)
 		if err != nil {
 			return ret, err
 		}
