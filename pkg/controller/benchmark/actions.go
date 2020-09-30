@@ -2,7 +2,6 @@ package benchmark
 
 import (
 	"fmt"
-	"os"
 	"context"
 	"strconv"
 	"sort"
@@ -13,7 +12,6 @@ import (
 
         //appsv1 "k8s.io/api/apps/v1"
         corev1 "k8s.io/api/core/v1"
-        batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -22,7 +20,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/apimachinery/pkg/runtime"
 	snapshotscheme "github.com/kubernetes-csi/external-snapshotter/v2/pkg/client/clientset/versioned/scheme"
 	"k8s.io/apiserver/pkg/storage/names" 
@@ -184,26 +181,8 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 	}
 
 	// Add INSTANCE_NUM env to init containers, so multiple workload instances can coordinate initialization
-	// TODO: Also do this for other kinds of object.  Ideally do it generically for any kind with a PodSpec
-	if kind == "Job" {
-		for n, _ := range obj.(*batchv1.Job).Spec.Template.Spec.InitContainers {
-			obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env, corev1.EnvVar{Name: "INSTANCE_NUM", Value: strconv.Itoa(w)})
-			obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env, corev1.EnvVar{Name: "NUM_INSTANCES", Value: strconv.Itoa(count)})
-		}
-		for n, _ := range obj.(*batchv1.Job).Spec.Template.Spec.Containers {
-			obj.(*batchv1.Job).Spec.Template.Spec.Containers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.Containers[n].Env, corev1.EnvVar{Name: "INSTANCE_NUM", Value: strconv.Itoa(w)})
-			obj.(*batchv1.Job).Spec.Template.Spec.Containers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.Containers[n].Env, corev1.EnvVar{Name: "NUM_INSTANCES", Value: strconv.Itoa(count)})
-		}
-	} else if kind == "Pod" {
-		for n, _ := range obj.(*corev1.Pod).Spec.InitContainers {
-			obj.(*corev1.Pod).Spec.InitContainers[n].Env = append(obj.(*corev1.Pod).Spec.InitContainers[n].Env, corev1.EnvVar{Name: "INSTANCE_NUM", Value: strconv.Itoa(w)})
-			obj.(*corev1.Pod).Spec.InitContainers[n].Env = append(obj.(*corev1.Pod).Spec.InitContainers[n].Env, corev1.EnvVar{Name: "NUM_INSTANCES", Value: strconv.Itoa(count)})
-		}
-		for n, _ := range obj.(*corev1.Pod).Spec.Containers {
-			obj.(*corev1.Pod).Spec.Containers[n].Env = append(obj.(*corev1.Pod).Spec.Containers[n].Env, corev1.EnvVar{Name: "INSTANCE_NUM", Value: strconv.Itoa(w)})
-			obj.(*corev1.Pod).Spec.Containers[n].Env = append(obj.(*corev1.Pod).Spec.Containers[n].Env, corev1.EnvVar{Name: "NUM_INSTANCES", Value: strconv.Itoa(count)})
-		}
-	}
+	utils.SetEnvVar("INSTANCE_NUM", strconv.Itoa(w), obj)
+	utils.SetEnvVar("NUM_INSTANCES", strconv.Itoa(count), obj)
 
 	// Add actionname and multiinstance labels to object
 	labels, err := meta.NewAccessor().Labels(obj)

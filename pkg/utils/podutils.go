@@ -374,3 +374,28 @@ func AddLabelsGeneric(obj runtime.Object, labels map[string]string) (runtime.Obj
 func addLabels(spec *metav1.ObjectMeta, labels map[string]string) {
 	spec.Labels = labels
 }
+
+func SetEnvVar(name, value string, obj runtime.Object) (runtime.Object, error) {
+	kind, err := meta.NewAccessor().Kind(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	if kind == "Job" {
+		for n, _ := range obj.(*batchv1.Job).Spec.Template.Spec.InitContainers {
+			obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.InitContainers[n].Env, corev1.EnvVar{Name: name, Value: value})
+		}
+		for n, _ := range obj.(*batchv1.Job).Spec.Template.Spec.Containers {
+			obj.(*batchv1.Job).Spec.Template.Spec.Containers[n].Env = append(obj.(*batchv1.Job).Spec.Template.Spec.Containers[n].Env, corev1.EnvVar{Name: name, Value: value})
+		}
+	} else if kind == "Pod" {
+		for n, _ := range obj.(*corev1.Pod).Spec.InitContainers {
+			obj.(*corev1.Pod).Spec.InitContainers[n].Env = append(obj.(*corev1.Pod).Spec.InitContainers[n].Env, corev1.EnvVar{Name: name, Value: value})
+		}
+		for n, _ := range obj.(*corev1.Pod).Spec.Containers {
+			obj.(*corev1.Pod).Spec.Containers[n].Env = append(obj.(*corev1.Pod).Spec.Containers[n].Env, corev1.EnvVar{Name: name, Value: value})
+		}
+	}
+
+	return obj, nil
+}
