@@ -171,6 +171,7 @@ func GetLastLine(s string) (string, error) {
 	for scanner.Scan() {
 		lastLine = scanner.Text()
 	}
+	return lastLine, nil
 }
 
 func ReadContainerLog(pod string, container string) (string, error) {
