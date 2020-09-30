@@ -249,7 +249,7 @@ func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime, comple
 			}
 		}
 	}
-	
+
 	if bm.Spec.AllResultsOutput != "" {
 		log.Info("Output size", "size", len(allResults))
 		results := make(map[string]interface{})

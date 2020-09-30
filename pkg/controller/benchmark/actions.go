@@ -233,11 +233,6 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 	meta.NewAccessor().SetLabels(obj, labels)
 	obj, err = utils.AddLabelsGeneric(obj, labels)
 
-	// Add use config if given
-	//if a.Config != "" {
-	//	obj, err = utils.UseUserConfig(obj, a.Config)
-	//}
-
 	// Add sync container if sync start requested
 	// TODO: Make this an annotation rather than field in the benchmark spec
 	if isMultiInstanceObj {
@@ -250,11 +245,6 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 	// the create fails (we catch the "AlreadyExists" error and ignore)
 	name, err := meta.NewAccessor().Name(obj)
 	kind, err = meta.NewAccessor().Kind(obj)
-	/*
-	if a.Count > 0 && isMultiInstanceObj {
-		name += "-"+strconv.Itoa(w)
-		meta.NewAccessor().SetName(obj, name)
-	}*/
 
 	// Ownership can't transcend namespaces
 	makeOwner := true
@@ -351,7 +341,6 @@ func (r *ReconcileBenchmark) DeleteObj(bm *cnsbench.Benchmark, d cnsbench.Delete
 }
 
 func (r *ReconcileBenchmark) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale) error {
-	//var newSize int32
 	var err error
 
 	name := names.NameGenerator.GenerateName(names.SimpleNameGenerator, "scale-pod-")

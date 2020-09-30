@@ -112,17 +112,10 @@ func PodComplete(c client.Client, name string) (bool, error) {
 }
 
 func StatefulSetComplete(c client.Client, name string) (bool, error) {
-	//updated := false
-
 	obj := &appsv1.StatefulSet{}
 	if err := c.Get(context.TODO(), types.NamespacedName{Name: name, Namespace: "default"}, obj); err != nil {
 		return false, err
 	}
-	/*
-	annotations := obj.ObjectMeta.Annotations
-	if annotations == nil {
-		annotations = make(map[string]string)
-	}*/
 
 	labelSelector, err := metav1.LabelSelectorAsSelector(obj.Spec.Selector)
 	if err != nil {
@@ -145,29 +138,9 @@ func StatefulSetComplete(c client.Client, name string) (bool, error) {
 					return false, nil
 				}
 			}
-			/*
-			numContainers := len(pod.Status.ContainerStatuses)
-			if numContainers > 0 && pod.Status.ContainerStatuses[numContainers-1].State.Terminated != nil {
-				// container is done, add to annotations
-				if _, exists := annotations[pod.Name]; !exists {
-					annotations[pod.Name] = "complete"
-					updated = true
-				}
-			}*/
 		}
 	}
 
-	/*
-	fmt.Println(annotations, len(annotations), updated, int(*obj.Spec.Replicas))
-	if updated {
-		obj.ObjectMeta.Annotations = annotations
-		if err := c.Update(context.TODO(), obj); err != nil {
-			return false, err
-		}
-	}
-
-	return len(annotations) >= int(*obj.Spec.Replicas), nil
-	*/
 	return true, nil
 }
 
@@ -198,7 +171,6 @@ func GetLastLine(s string) (string, error) {
 	for scanner.Scan() {
 		lastLine = scanner.Text()
 	}
-	return lastLine, scanner.Err()
 }
 
 func ReadContainerLog(pod string, container string) (string, error) {
@@ -355,7 +327,6 @@ func addSyncContainer(spec *corev1.PodSpec, count int, actionName string, syncGr
 	c := corev1.Container{}
 	c.Name = "sync-container"
 	c.Image = "dwdraju/alpine-curl-jq"
-	//c.Command = []string{"/scripts/ready.sh", "actionname%3D"+actionName, strconv.Itoa(numContainers*count)}
 	c.Command = []string{"/scripts/ready.sh", "actionname%3D"+actionName, strconv.Itoa(numContainers*count)}
 	if syncGroup != "" {
 		c.Command = append(c.Command, "syncgroup%3D"+syncGroup)
