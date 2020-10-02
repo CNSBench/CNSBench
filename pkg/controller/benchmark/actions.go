@@ -83,7 +83,7 @@ func (r *ReconcileBenchmark) RunInstance(bm *cnsbench.Benchmark, cm *corev1.Conf
 		if !utils.Contains(multipleInstanceObjs, k) {
 			continue
 		}
-		nk, err := r.prepareAndRun(bm, instanceNum, k, true, action.Name, action.CreateObjSpec, cm, []byte(cm.Data[k]))
+		nk, err := r.prepareAndRun(bm, instanceNum, k, action.Name, action.CreateObjSpec, cm, []byte(cm.Data[k]))
 		if err != nil {
 			return ret, err
 		}
@@ -122,7 +122,7 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 		}
 
 		for w := 0; w < count; w++ {
-			nk, err := r.prepareAndRun(bm, w, k, utils.Contains(multipleInstanceObjs, k), actionName, a, cm, []byte(cm.Data[k]))
+			nk, err := r.prepareAndRun(bm, w, k, actionName, a, cm, []byte(cm.Data[k]))
 			if err != nil {
 				return ret, err
 			}
@@ -134,24 +134,81 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 	return ret, nil
 }
 
-func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k string, isMultiInstanceObj bool, actionName string, a cnsbench.CreateObj, cm *corev1.ConfigMap, objBytes []byte) (utils.NameKind, error) {
+func (r *ReconcileBenchmark) getParserContainerImage(parserName string) (string, error) {
+	parserCm := &corev1.ConfigMap{}
+
+	err := r.client.Get(context.TODO(), client.ObjectKey{Name: parserName, Namespace: "library"}, parserCm)
+	if err != nil {
+		log.Error(err, "Error getting ConfigMap", "spec", parserName)
+		return "", err
+	}
+
+	if imageName, exists := parserCm.ObjectMeta.Annotations["container"]; !exists {
+		log.Info("Container annotation does not exist for parser", "parser", parserName)
+		return "busybox", nil
+	} else {
+		return imageName, nil
+	}
+}
+
+func (r *ReconcileBenchmark) createTmpParser(bm *cnsbench.Benchmark, parserName string) (string, error) {
+	parserCm := &corev1.ConfigMap{}
+
+	err := r.client.Get(context.TODO(), client.ObjectKey{Name: parserName, Namespace: "library"}, parserCm)
+	if err != nil {
+		log.Error(err, "Error getting ConfigMap", "spec", parserName)
+		return "", err
+	}
+
+	newCm := corev1.ConfigMap {
+		ObjectMeta: metav1.ObjectMeta {
+			Name: names.NameGenerator.GenerateName(names.SimpleNameGenerator, parserName+"-"),
+			Namespace: "default",
+		},
+		Data: make(map[string]string, 0),
+	}
+	for k, v := range parserCm.Data {
+		newCm.Data[k] = v
+	}
+
+	if err := r.createObj(bm, runtime.Object(&newCm), true); err != nil {
+		log.Error(err, "Creating temp ConfigMap")
+	}
+
+	return newCm.ObjectMeta.Name, err
+}
+
+func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k string, actionName string, a cnsbench.CreateObj, cm *corev1.ConfigMap, objBytes []byte) (utils.NameKind, error) {
 	var count int
 	if a.Count == 0 {
 		count = 1
 	} else {
 		count = a.Count
 	}
+
 	// Replace vars in workload spec with values from benchmark object
 	cmString := string(objBytes)
 	for k, v := range a.Vars {
 		log.Info("Searching for var", "var", k, "replacement", v)
-		// If we're doing > 1 instance and this is an object that's getting repeated,
 		cmString = strings.ReplaceAll(cmString, "{{"+k+"}}", v)
 	}
 	cmString = strings.ReplaceAll(cmString, "{{ACTION_NAME}}", actionName)
 	cmString = strings.ReplaceAll(cmString, "{{ACTION_NAME_CAPS}}", strings.ToUpper(actionName))
 	cmString = strings.ReplaceAll(cmString, "{{INSTANCE_NUM}}", strconv.Itoa(w))
 	cmString = strings.ReplaceAll(cmString, "{{NUM_INSTANCES}}", strconv.Itoa(count))
+
+	// Use workload spec's annotations as default values for any remaining variables
+	for k, v := range cm.ObjectMeta.Annotations {
+		s := strings.SplitN(k, ".", 3)
+		if len(s) == 3 && s[0] == "cnsbench" && s[1] == "default" {
+			log.Info("Searching for var", "var", s[2], "default replacement", v)
+			cmString = strings.ReplaceAll(cmString, "{{"+s[2]+"}}", v)
+		}
+	}
+
+	if strings.Contains(cmString, "{{") {
+		log.Info("Object definition contains double curly brackets ({{), possible unset variable", "cmstring", cmString)
+	}
 
 	// Decode the yaml object from the workload spec
 	objBytes = []byte(cmString)
@@ -162,20 +219,47 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 		return utils.NameKind{}, err
 	}
 
+	accessor := meta.NewAccessor()
+
 	// Get the object's kind
-	kind, err := meta.NewAccessor().Kind(obj)
+	kind, err := accessor.Kind(obj)
 	log.Info("KIND", "KIND", kind)
 
-	// Add parser container, if the object is the right kind and listed in parseWorklods annotation
-	if kind == "Job" || kind == "Pod" || kind == "StatefulSet" {
-		if parseWorkloads, exists := cm.ObjectMeta.Annotations["parseWorkloads"]; exists && strings.Contains(parseWorkloads, k) {
-			parser, parserExists := cm.ObjectMeta.Annotations["parser"]
-			outfile, outfileExists := cm.ObjectMeta.Annotations["outputFile"]
-			if parserExists && outfileExists {
-				obj, err = utils.AddParserContainerGeneric(obj, parser, outfile)
+	objAnnotations, err := accessor.Annotations(obj)
+	if err != nil {
+		log.Error(err, "Error getting object annotations")
+		return utils.NameKind{}, err
+	}
+
+	var role string
+	if _, exists := objAnnotations["role"]; exists {
+		role = objAnnotations["role"]
+	} else {
+		// if no role is set, consider the object a helper (e.g., PVC, ConfigMap)
+		role = "helper"
+	}
+
+	for _, output := range a.OutputFiles {
+		if role == output.Target {
+			// This object needs a parser container added.  The parsers are defined in the
+			// "library" namespace, so every time a parser is used make a temporary ConfigMap
+			// in the default (TODO: should be same namespace as Benchmark obj, not necessarily
+			// default) namespace.  Make it controlled by the Benchmark object so it will be
+			// cleaned up when the benchmark exits.
+			// XXX: Since the parser might be packaged with the current workload, need to make sure
+			// the parser object is seen before any objects referencing it in an Output
+			if tmpCmName, err := r.createTmpParser(bm, output.Parser); err != nil {
+				log.Error(err, "Error adding parser container", output)
+			} else {
+				imageName, err := r.getParserContainerImage(output.Parser)
 				if err != nil {
-					log.Error(err, "Error adding parser container", cm.ObjectMeta.Annotations)
+					log.Error(err, "Error getting parser container image", output)
 				}
+				obj, err = utils.AddParserContainerGeneric(obj, tmpCmName, output.Filename, imageName)
+				if err != nil {
+					log.Error(err, "Error adding parser container", output)
+				}
+				log.Info("Created temp parser", "name", tmpCmName)
 			}
 		}
 	}
@@ -185,7 +269,7 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 	utils.SetEnvVar("NUM_INSTANCES", strconv.Itoa(count), obj)
 
 	// Add actionname and multiinstance labels to object
-	labels, err := meta.NewAccessor().Labels(obj)
+	labels, err := accessor.Labels(obj)
 	if err != nil {
 		log.Error(err, "Error getting labels")
 	}
@@ -196,14 +280,12 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 		labels["syncgroup"] = a.SyncGroup
 	}
 	labels["actionname"] = actionName
-	labels["multiinstance"] = strconv.FormatBool(isMultiInstanceObj)
 	log.Info("labels", "labels", labels)
-	meta.NewAccessor().SetLabels(obj, labels)
+	accessor.SetLabels(obj, labels)
 	obj, err = utils.AddLabelsGeneric(obj, labels)
 
 	// Add sync container if sync start requested
-	// TODO: Make this an annotation rather than field in the benchmark spec
-	if isMultiInstanceObj {
+	if _, exists := objAnnotations["sync"]; exists {
 		obj, err = utils.AddSyncContainerGeneric(obj, a.Count, actionName, a.SyncGroup)
 	}
 
@@ -211,12 +293,12 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 	// object's name if they want to create multiple instances of that object
 	// when count > 0.  Otherwise each object will have the same name, so
 	// the create fails (we catch the "AlreadyExists" error and ignore)
-	name, err := meta.NewAccessor().Name(obj)
-	kind, err = meta.NewAccessor().Kind(obj)
+	name, err := accessor.Name(obj)
+	kind, err = accessor.Kind(obj)
 
 	// Ownership can't transcend namespaces
 	makeOwner := true
-	if ns, _ := meta.NewAccessor().Namespace(obj); ns != "default" {
+	if ns, _ := accessor.Namespace(obj); ns != "default" {
 		makeOwner = false
 	}
 
@@ -230,8 +312,7 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 		}
 	}
 
-	// TODO: Need a better way of knowing what workload objects to wait for completion
-	if parseWorkloads, exists := cm.ObjectMeta.Annotations["parseWorkloads"]; exists && strings.Contains(parseWorkloads, k) {
+	if role == "workload" {
 		return utils.NameKind{name, kind}, nil
 	}
 
