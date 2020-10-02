@@ -8,18 +8,8 @@ type HttpPost struct {
 	URL string `json:"url"`
 }
 
-type OutputFile struct {
-	Path string `json:"path"`
-	// +optional
-	Parser string `json:"parser"`
-	// +optional
-	Label string `json:"label"`
-}
-
 type ActionOutput struct {
 	OutputName string `json:"outputName"`
-	// +optional
-	Files []OutputFile `json:"files"`
 }
 
 type Output struct {
@@ -68,6 +58,12 @@ type Scale struct {
 	ScriptConfigMap string `json:"scriptConfigMap"`
 }
 
+type OutputFile struct {
+	Filename string `json:"filename"`
+	Parser string `json:"parser"`
+	Target string `json:"target"`
+}
+
 type CreateObj struct {
 	Workload string `json:"workload"`
 
@@ -77,48 +73,32 @@ type CreateObj struct {
 
 	// +optional
 	// +nullable
-	//VolName string `json:"volName"`
-
-	// +optional
-	// +nullable
-	//StorageClass string `json:"storageClass"`
-
-	// +optional
-	// +nullable
-	//Config string `json:"config"`
-
-	// +optional
-	// +nullable
 	Count int `json:"count"`
 
 	// +optional
 	// +nullable
-	SyncStart bool `json:"syncStart"`
-
-	// +optional
-	// +nullable
-	//SameVolume bool `json:"sameVolume"`
-
-	// +optional
-	// +nullable
 	SyncGroup string `json:"syncGroup"`
+
+	// +optional
+	// +nullable
+	OutputFiles []OutputFile `json:"outputFiles"`
 }
 
 type Action struct {
 	Name string `json:"name"`
 
 	// +optional
-	//ScaleSpec Scale `json:"scaleSpec"`
+	// +nullable
+	CreateObjSpec CreateObj `json:"createObjSpec"`
 
 	// +optional
 	// +nullable
-	CreateObjSpec CreateObj `json:"createObjSpec"`
-	// +optional
-	// +nullable
 	SnapshotSpec Snapshot `json:"snapshotSpec"`
+
 	// +optional
 	// +nullable
 	ScaleSpec Scale `json:"scaleSpec"`
+
 	// +optional
 	// +nullable
 	DeleteSpec Delete `json:"deleteSpec"`
