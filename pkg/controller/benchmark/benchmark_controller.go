@@ -167,41 +167,11 @@ type WorkloadResult struct {
 	ActionName string
 	PodName string
 	NodeName string
-	TimeToCreate int64
-	//Results map[string]interface{}
 	Results string
-}
-
-func (r *ReconcileBenchmark) getTiming(name string, timings []map[string]interface{}) int64 {
-	for _, t := range timings {
-		if t["name"] == name {
-			switch v := t["duration"].(type) {
-			case int64:
-				return t["duration"].(int64)
-			default:
-				log.Info("Duration not int64", "t", t, "type", v)
-				return -1
-			}
-		}
-	}
-	return -1
 }
 
 func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime, completionTime, initCompletionTime int64) {
 	log.Info("Do outputs")
-
-	// TODO: how to specify url in benchmark spec?
-	auditLogs, err := utils.GetAuditLogs(startTime, completionTime, "http://loadbalancer:9200")
-	if err != nil {
-		log.Error(err, "Error getting audit logs")
-	}
-	log.Info("auditlogs", "logs", len(auditLogs))
-	// TODO: better way of specifying flags
-	operationTimes, err := objecttiming.ParseLogs(auditLogs, 1)
-	log.Info("ops", "ops", operationTimes)
-	if err != nil {
-		log.Error(err, "Error parsing audit logs")
-	}
 
 	allResults := []WorkloadResult{}
 	for _, action := range bm.Spec.Actions {
@@ -234,10 +204,9 @@ func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime, comple
 						continue
 					}
 					log.Info("Adding output to lists")
-					workloadResults = append(workloadResults, WorkloadResult{action.Name, pod.Name, pod.Spec.NodeName, r.getTiming(pod.Name, operationTimes), lastLine})
-					//allResults = append(allResults, WorkloadResult{action.Name, pod.Name, pod.Spec.NodeName, r.getTiming(pod.Name, operationTimes), lastLine})
 					log.Info("Last line length", "len", len(lastLine))
-					allResults = append(allResults, WorkloadResult{action.Name, pod.Name, pod.Spec.NodeName, -1, lastLine})
+					workloadResults = append(workloadResults, WorkloadResult{action.Name, pod.Name, pod.Spec.NodeName, lastLine})
+					allResults = append(allResults, WorkloadResult{action.Name, pod.Name, pod.Spec.NodeName, lastLine})
 				}
 			}
 		}
