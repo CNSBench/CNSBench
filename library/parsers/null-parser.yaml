@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: null-parser
+  namespace: library
+  labels:
+    type: parser
+  annotations:
+    container: busybox
+data:
+  null.sh: "#!/bin/sh\n\ncat $1\nexit 0\n"

@@ -246,34 +246,33 @@ func useUserConfig(spec *corev1.PodSpec, config string) {
 	}
 }
 
-func AddParserContainerGeneric(obj runtime.Object, parserCMName string, logFilename string) (runtime.Object, error) {
+func AddParserContainerGeneric(obj runtime.Object, parserCMName, logFilename, imageName string) (runtime.Object, error) {
 	kind, err := meta.NewAccessor().Kind(obj)
 	if err != nil {
 		return nil, err
 	}
 	if kind == "Job" {
 		pt := *obj.(*batchv1.Job)
-		addParserContainer(&pt.Spec.Template.Spec, parserCMName, logFilename)
+		addParserContainer(&pt.Spec.Template.Spec, parserCMName, logFilename, imageName)
 		return runtime.Object(&pt), nil
 	} else if kind == "Pod" {
 		pt := *obj.(*corev1.Pod)
-		addParserContainer(&pt.Spec, parserCMName, logFilename)
+		addParserContainer(&pt.Spec, parserCMName, logFilename, imageName)
 		return runtime.Object(&pt), nil
 	} else if kind == "StatefulSet" {
 		pt := *obj.(*appsv1.StatefulSet)
-		addParserContainer(&pt.Spec.Template.Spec, parserCMName, logFilename)
+		addParserContainer(&pt.Spec.Template.Spec, parserCMName, logFilename, imageName)
 		return runtime.Object(&pt), nil
 	}
 	return nil, nil
 }
 
-func addParserContainer(spec *corev1.PodSpec, parserCMName string, logFilename string) {
+func addParserContainer(spec *corev1.PodSpec, parserCMName, logFilename, imageName string) {
 	spec.ShareProcessNamespace = utilptr.BoolPtr(true)
 
 	c := corev1.Container{}
 	c.Name = "parser-container"
-	//c.Image = "python:3.8.0"
-	c.Image = "loadbalancer:5000/cnsb/python"
+	c.Image = imageName
 	c.Command = []string{"/collector/parse-logs.sh", logFilename}
 	//c.Command = []string{"tail", "-f", "/dev/null"}
 	c.VolumeMounts = []corev1.VolumeMount{
