@@ -406,7 +406,7 @@ func (r *ReconcileBenchmark) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale) 
 			Containers: []corev1.Container {
 				{
 					Name: "scale-container",
-					Image: "loadbalancer:5000/cnsb/kubectl",
+					Image: "localcontainerrepo:5000/cnsb/kubectl",
 					Command: []string{"/scripts/scaleup.sh", s.ObjName},
 					VolumeMounts: []corev1.VolumeMount {
 						{
