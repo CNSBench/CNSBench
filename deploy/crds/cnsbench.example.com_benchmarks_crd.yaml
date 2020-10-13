@@ -35,31 +35,42 @@ spec:
                 items:
                   properties:
                     createObjSpec:
+                      nullable: true
                       properties:
-                        config:
-                          nullable: true
-                          type: string
                         count:
                           nullable: true
                           type: integer
-                        sameVolume:
+                        outputFiles:
+                          items:
+                            properties:
+                              filename:
+                                type: string
+                              parser:
+                                type: string
+                              target:
+                                type: string
+                            required:
+                            - filename
+                            - parser
+                            - target
+                            type: object
                           nullable: true
-                          type: boolean
-                        storageClass:
+                          type: array
+                        syncGroup:
                           nullable: true
                           type: string
-                        syncStart:
+                        vars:
+                          additionalProperties:
+                            type: string
                           nullable: true
-                          type: boolean
-                        volName:
-                          nullable: true
-                          type: string
+                          type: object
                         workload:
                           type: string
                       required:
                       - workload
                       type: object
                     deleteSpec:
+                      nullable: true
                       properties:
                         selector:
                           description: ObjName string `json:"objName"`
@@ -113,19 +124,6 @@ spec:
                       type: string
                     outputs:
                       properties:
-                        files:
-                          items:
-                            properties:
-                              label:
-                                type: string
-                              parser:
-                                type: string
-                              path:
-                                type: string
-                            required:
-                            - path
-                            type: object
-                          type: array
                         outputName:
                           type: string
                       required:
@@ -137,14 +135,15 @@ spec:
                     scaleSpec:
                       description: 'TODO: need a way of specifying how to scale -
                         up or down, and by how much'
+                      nullable: true
                       properties:
-                        objKind:
-                          type: string
                         objName:
                           type: string
+                        scriptConfigMap:
+                          type: string
                       required:
-                      - objKind
                       - objName
+                      - scriptConfigMap
                       type: object
                     snapshotSpec:
                       description: Snapshots and deletions can operate on an individual
@@ -152,19 +151,23 @@ spec:
                         objects that match - should specify different policies for
                         deciding which object to delete, e.g. "newest", "oldest",
                         "random", ???
+                      nullable: true
                       properties:
+                        actionName:
+                          type: string
                         snapshotClass:
                           type: string
-                        volName:
-                          type: string
                       required:
+                      - actionName
                       - snapshotClass
-                      - volName
                       type: object
                   required:
                   - name
                   type: object
                 type: array
+              allResultsOutput:
+                nullable: true
+                type: string
               outputs:
                 items:
                   properties:
@@ -216,6 +219,8 @@ spec:
                 type: array
               runtime:
                 type: string
+            required:
+            - actions
             type: object
           status:
             description: BenchmarkStatus defines the observed state of Benchmark
