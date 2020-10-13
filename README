@@ -1,0 +1,28 @@
+Prerequisites
+-------------
+
+Install v0.18 of the Operator SDK and CLI tool: https://v0-18-x.sdk.operatorframework.io/docs/install-operator-sdk/
+Install additional prerequisites for Golang based Operators: https://v0-18-x.sdk.operatorframework.io/docs/golang/installation/
+
+Setup
+-----
+
+Install the custom resource definition for the Benchmark object:
+`kubectl apply -f deploy/crds/cnsbench.example.com_benchmarks_crd.yaml`
+
+TODO: Describe how to install Workload Library.
+
+Running
+-------
+
+Run the controller with `operator-sdk run local`
+
+TODO: Add sample Benchmark YAML files.
+
+Troubleshooting
+---------------
+
+If for some reason the controller crashes and a Benchmark resource still has a
+finalizer set, it is safe to manually remove the finalizer so that the resource
+can be deleted.  To do so, do `kubectl edit benchmark <resource name>` and
+delete the line containing the finalizer.
