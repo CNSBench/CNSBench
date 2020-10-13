@@ -104,18 +104,10 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 		return []utils.NameKind{}, err
 	}
 
-	fmt.Println(cm.ObjectMeta.Annotations["multipleInstances"])
-	var multipleInstanceObjs []string
-	if mis, found := cm.ObjectMeta.Annotations["multipleInstances"]; found {
-		multipleInstanceObjs = strings.Split(mis, ",")
-	}
-	fmt.Println("mis", multipleInstanceObjs, len(multipleInstanceObjs))
-
 	ret := []utils.NameKind{}
 	for k := range cm.Data {
-		fmt.Println(k, utils.Contains(multipleInstanceObjs, k))
 		var count int
-		if a.Count == 0 || !utils.Contains(multipleInstanceObjs, k) {
+		if a.Count == 0 {
 			count = 1
 		} else {
 			count = a.Count

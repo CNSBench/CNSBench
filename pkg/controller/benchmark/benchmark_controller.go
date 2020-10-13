@@ -10,7 +10,6 @@ import (
 	"github.com/cnsbench/pkg/rates"
 	"github.com/cnsbench/pkg/utils"
 	"github.com/cnsbench/pkg/output"
-	"github.com/cnsbench/pkg/objecttiming"
 
 	cnsbench "github.com/cnsbench/pkg/apis/cnsbench/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -311,20 +310,6 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 	// If our per-Benchmark obj state doesn't exist, create it
 	if _, exists := r.state[instanceName]; !exists {
 		r.state[instanceName] = &BenchmarkControllerState{make(chan bool), make(chan bool), make([]string, 0), make([]string, 0), []utils.NameKind{}}
-	}
-
-	// XXX This shouldn't be necessary, but if optional arrays are omitted from
-	// the object they get set to "null" which causes Updates to throw an error
-	// We don't need to actually do the Update here, but setting these values
-	// now will ensure if we do Update later on in this reconcile there won't be
-	// an error
-	if instance.Spec.Outputs == nil {
-		instance.Spec.Outputs = []cnsbench.Output{}
-	}
-	for i := 0; i < len(instance.Spec.Actions); i++ {
-		if instance.Spec.Actions[i].Outputs.Files == nil {
-			instance.Spec.Actions[i].Outputs.Files = []cnsbench.OutputFile{}
-		}
 	}
 
 	// if we're here, then we're either still running or haven't started yet
