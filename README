@@ -20,6 +20,19 @@ Make sure the KUBECONFIG environment variable is set, e.g.
 
 Run the controller with `operator-sdk run local`
 
+To get started quickly, you can run a simple Python HTTP echo server that will
+simply print the benchmark output to stdout, e.g.:
+
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    
+    class RequestHandler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            print(self.rfile.read(int(self.headers.get('Content-Length'))))
+            self.send_response(200)
+            
+    server = HTTPServer(('', 8888), RequestHandler)
+    server.serve_forever()
+
 TODO: Add sample Benchmark YAML files.
 
 Troubleshooting
