@@ -1,0 +1,23 @@
+apiVersion: cnsbench.example.com/v1alpha1
+kind: Benchmark
+metadata:
+  name: example-benchmark
+spec:
+  actions:
+    - name: fio
+      createObjSpec:
+        workload: fio
+        vars:
+          storageClass: cstor-csi-stripe
+        outputFiles:
+        - filename: /tmp/output.json
+          target: workload
+          parser: null-parser
+
+  # All results from all actions will be sent to the "echo" output:
+  allResultsOutput: echo
+
+  outputs:
+    - name: echo
+      httpPostSpec:
+        url: http://localhost:8888
