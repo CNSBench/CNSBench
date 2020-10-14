@@ -15,6 +15,9 @@ TODO: Describe how to install Workload Library.
 Running
 -------
 
+Make sure the KUBECONFIG environment variable is set, e.g.
+`export KUBECONFIG=~/.kube/config`
+
 Run the controller with `operator-sdk run local`
 
 TODO: Add sample Benchmark YAML files.
