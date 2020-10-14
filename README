@@ -10,7 +10,7 @@ Setup
 Install the custom resource definition for the Benchmark object:
 `kubectl apply -f deploy/crds/cnsbench.example.com_benchmarks_crd.yaml`
 
-TODO: Describe how to install Workload Library.
+Clone and install the Workload Library (https://github.com/CNSBench/workload-library)
 
 Running
 -------
@@ -20,7 +20,8 @@ Make sure the KUBECONFIG environment variable is set, e.g.
 
 Run the controller with `operator-sdk run local`
 
-To get started quickly, you can run a simple Python HTTP echo server that will
+Currently the only type of output implemented is the "HTTP POST" output.  To
+get started quickly, you can run a simple Python HTTP echo server that will
 simply print the benchmark output to stdout, e.g.:
 
     from http.server import HTTPServer, BaseHTTPRequestHandler
