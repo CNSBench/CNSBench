@@ -170,6 +170,26 @@ func (r *ReconcileBenchmark) createTmpParser(bm *cnsbench.Benchmark, parserName 
 	return newCm.ObjectMeta.Name, err
 }
 
+func (r *ReconcileBenchmark) addParserContainer(bm *cnsbench.Benchmark, obj runtime.Object, parser string, outfile string, num int) (runtime.Object, error) {
+	if tmpCmName, err := r.createTmpParser(bm, parser); err != nil {
+		log.Error(err, "Error adding parser container", parser)
+		return obj, err
+	} else {
+		imageName, err := r.getParserContainerImage(parser)
+		if err != nil {
+			log.Error(err, "Error getting parser container image", parser)
+			return obj, err
+		}
+		obj, err = utils.AddParserContainerGeneric(obj, tmpCmName, outfile, imageName, num)
+		if err != nil {
+			log.Error(err, "Error adding parser container", outfile)
+			return obj, err
+		}
+		log.Info("Created temp parser", "name", tmpCmName)
+	}
+	return obj, nil
+}
+
 func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k string, actionName string, a cnsbench.CreateObj, cm *corev1.ConfigMap, objBytes []byte) (utils.NameKind, error) {
 	var count int
 	if a.Count == 0 {
@@ -231,29 +251,27 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 		role = "helper"
 	}
 
-	for _, output := range a.OutputFiles {
-		if role == output.Target {
-			// This object needs a parser container added.  The parsers are defined in the
-			// "library" namespace, so every time a parser is used make a temporary ConfigMap
-			// in the default (TODO: should be same namespace as Benchmark obj, not necessarily
-			// default) namespace.  Make it controlled by the Benchmark object so it will be
-			// cleaned up when the benchmark exits.
-			// XXX: Since the parser might be packaged with the current workload, need to make sure
-			// the parser object is seen before any objects referencing it in an Output
-			if tmpCmName, err := r.createTmpParser(bm, output.Parser); err != nil {
-				log.Error(err, "Error adding parser container", output)
-			} else {
-				imageName, err := r.getParserContainerImage(output.Parser)
+	// If user is specifying output files, use those.  Otherwise, use the object's
+	// annotations
+	if len(a.OutputFiles) > 0 {
+		for i, output := range a.OutputFiles {
+			if role == output.Target {
+				// This object needs a parser container added.  The parsers are defined in the
+				// "library" namespace, so every time a parser is used make a temporary ConfigMap
+				// in the default (TODO: should be same namespace as Benchmark obj, not necessarily
+				// default) namespace.  Make it controlled by the Benchmark object so it will be
+				// cleaned up when the benchmark exits.
+				// XXX: Since the parser might be packaged with the current workload, need to make sure
+				// the parser object is seen before any objects referencing it in an Output
+				obj, err = r.addParserContainer(bm, obj, output.Parser, output.Filename, i)
 				if err != nil {
-					log.Error(err, "Error getting parser container image", output)
+					log.Error(err, "Error adding parser container")
 				}
-				obj, err = utils.AddParserContainerGeneric(obj, tmpCmName, output.Filename, imageName)
-				if err != nil {
-					log.Error(err, "Error adding parser container", output)
-				}
-				log.Info("Created temp parser", "name", tmpCmName)
 			}
 		}
+	} else if _, exists := objAnnotations["outputFile"]; exists {
+		// TODO: Allow more than one default output file
+		r.addParserContainer(bm, obj, objAnnotations["parser"], objAnnotations["outputFile"], 0)
 	}
 
 	// Add INSTANCE_NUM env to init containers, so multiple workload instances can coordinate initialization

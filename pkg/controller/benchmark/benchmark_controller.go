@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"context"
 	"time"
-	//"strings"
+	"strings"
 	//"encoding/json"
 
 	"github.com/cnsbench/pkg/rates"
@@ -191,8 +191,8 @@ func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime, comple
 		for _, pod := range pods.Items {
 			log.Info("Getting output", "pod", pod.Name, "action", action.Name)
 			for _, c := range pod.Spec.Containers {
-				if c.Name == "parser-container" {
-					out, err := utils.ReadContainerLog(pod.Name, "parser-container")
+				if strings.Contains(c.Name, "parser-container") {
+					out, err := utils.ReadContainerLog(pod.Name, c.Name)
 					if err != nil {
 						log.Error(err, "Reading pod output")
 						continue

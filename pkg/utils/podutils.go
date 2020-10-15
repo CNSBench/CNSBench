@@ -246,49 +246,49 @@ func useUserConfig(spec *corev1.PodSpec, config string) {
 	}
 }
 
-func AddParserContainerGeneric(obj runtime.Object, parserCMName, logFilename, imageName string) (runtime.Object, error) {
+func AddParserContainerGeneric(obj runtime.Object, parserCMName, logFilename, imageName string, num int) (runtime.Object, error) {
 	kind, err := meta.NewAccessor().Kind(obj)
 	if err != nil {
 		return nil, err
 	}
 	if kind == "Job" {
 		pt := *obj.(*batchv1.Job)
-		addParserContainer(&pt.Spec.Template.Spec, parserCMName, logFilename, imageName)
+		addParserContainer(&pt.Spec.Template.Spec, parserCMName, logFilename, imageName, num)
 		return runtime.Object(&pt), nil
 	} else if kind == "Pod" {
 		pt := *obj.(*corev1.Pod)
-		addParserContainer(&pt.Spec, parserCMName, logFilename, imageName)
+		addParserContainer(&pt.Spec, parserCMName, logFilename, imageName, num)
 		return runtime.Object(&pt), nil
 	} else if kind == "StatefulSet" {
 		pt := *obj.(*appsv1.StatefulSet)
-		addParserContainer(&pt.Spec.Template.Spec, parserCMName, logFilename, imageName)
+		addParserContainer(&pt.Spec.Template.Spec, parserCMName, logFilename, imageName, num)
 		return runtime.Object(&pt), nil
 	}
 	return nil, nil
 }
 
-func addParserContainer(spec *corev1.PodSpec, parserCMName, logFilename, imageName string) {
+func addParserContainer(spec *corev1.PodSpec, parserCMName, logFilename, imageName string, num int) {
 	spec.ShareProcessNamespace = utilptr.BoolPtr(true)
 
 	c := corev1.Container{}
-	c.Name = "parser-container"
+	c.Name = "parser-container-"+strconv.Itoa(num)
 	c.Image = imageName
 	c.Command = []string{"/collector/parse-logs.sh", logFilename}
 	//c.Command = []string{"tail", "-f", "/dev/null"}
 	c.VolumeMounts = []corev1.VolumeMount{
 		{
 			MountPath: "/parser/",
-			Name: "parser",
+			Name: "parser-"+strconv.Itoa(num),
 		},
 		{
 			MountPath: "/collector/",
-			Name: "collector",
+			Name: "collector-"+strconv.Itoa(num),
 		},
 	}
 	spec.Containers = append(spec.Containers, c)
 
 	parserVol := corev1.Volume{}
-	parserVol.Name = "parser"
+	parserVol.Name = "parser-"+strconv.Itoa(num)
 	parserCmvs := corev1.ConfigMapVolumeSource {}
 	parserCmvs.DefaultMode = utilptr.Int32Ptr(0777)
 	parserCmvs.Name = parserCMName
@@ -296,7 +296,7 @@ func addParserContainer(spec *corev1.PodSpec, parserCMName, logFilename, imageNa
 	spec.Volumes = append(spec.Volumes, parserVol)
 
 	collectorVol := corev1.Volume{}
-	collectorVol.Name = "collector"
+	collectorVol.Name = "collector-"+strconv.Itoa(num)
 	collectorCmvs := corev1.ConfigMapVolumeSource {}
 	collectorCmvs.DefaultMode = utilptr.Int32Ptr(0777)
 	collectorCmvs.Name = "parse-logs"
