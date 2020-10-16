@@ -9,10 +9,16 @@ spec:
         workload: fio
         vars:
           storageClass: cstor-csi-stripe
-        outputFiles:
-        - filename: /tmp/output.json
-          target: workload
-          parser: null-parser
+
+        # See the README in workload-library/workloads/<workload name>/ for the
+        # default output files and output parsers.  To override these defaults,
+        # specify the output file, parser, and target (which resource within
+        # the workload the file should be collected from) here.  More than one
+        # outputFile may be specified.
+        #outputFiles:
+        #- filename: /output/output.json
+        #  target: workload
+        #  parser: null-parser
 
   # All results from all actions will be sent to the "echo" output:
   allResultsOutput: echo
