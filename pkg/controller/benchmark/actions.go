@@ -180,7 +180,7 @@ func (r *ReconcileBenchmark) addParserContainer(bm *cnsbench.Benchmark, obj runt
 			log.Error(err, "Error getting parser container image", parser)
 			return obj, err
 		}
-		obj, err = utils.AddParserContainerGeneric(obj, tmpCmName, outfile, imageName, num)
+		obj, err = utils.AddParserGeneric(obj, tmpCmName, outfile, imageName, num)
 		if err != nil {
 			log.Error(err, "Error adding parser container", outfile)
 			return obj, err

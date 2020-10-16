@@ -207,35 +207,34 @@ func ReadContainerLog(pod string, container string) (string, error) {
 	return buf.String(), nil
 }
 
-func AddParserContainerGeneric(obj runtime.Object, parserCMName, logFilename, imageName string, num int) (runtime.Object, error) {
+func AddParserGeneric(obj runtime.Object, parserCMName, logFilename, imageName string, num int) (runtime.Object, error) {
 	kind, err := meta.NewAccessor().Kind(obj)
 	if err != nil {
 		return nil, err
 	}
 	if kind == "Job" {
 		pt := *obj.(*batchv1.Job)
-		addParserContainer(&pt.Spec.Template.Spec, parserCMName, logFilename, imageName, num)
+		addParser(&pt.Spec.Template.Spec, parserCMName, logFilename, imageName, num)
 		return runtime.Object(&pt), nil
 	} else if kind == "Pod" {
 		pt := *obj.(*corev1.Pod)
-		addParserContainer(&pt.Spec, parserCMName, logFilename, imageName, num)
+		addParser(&pt.Spec, parserCMName, logFilename, imageName, num)
 		return runtime.Object(&pt), nil
 	} else if kind == "StatefulSet" {
 		pt := *obj.(*appsv1.StatefulSet)
-		addParserContainer(&pt.Spec.Template.Spec, parserCMName, logFilename, imageName, num)
+		addParser(&pt.Spec.Template.Spec, parserCMName, logFilename, imageName, num)
 		return runtime.Object(&pt), nil
 	}
 	return nil, nil
 }
 
-func addParserContainer(spec *corev1.PodSpec, parserCMName, logFilename, imageName string, num int) {
+func addParser(spec *corev1.PodSpec, parserCMName, logFilename, imageName string, num int) {
 	spec.ShareProcessNamespace = utilptr.BoolPtr(true)
 
 	c := corev1.Container{}
 	c.Name = "parser-container-"+strconv.Itoa(num)
 	c.Image = imageName
-	c.Command = []string{"/collector/parse-logs.sh", logFilename}
-	//c.Command = []string{"tail", "-f", "/dev/null"}
+	c.Command = []string{"/collector/parse-logs.sh", logFilename, strconv.Itoa(len(spec.Containers))}
 	c.VolumeMounts = []corev1.VolumeMount{
 		{
 			MountPath: "/parser/",
@@ -244,6 +243,16 @@ func addParserContainer(spec *corev1.PodSpec, parserCMName, logFilename, imageNa
 		{
 			MountPath: "/collector/",
 			Name: "collector-"+strconv.Itoa(num),
+		},
+	}
+	c.Env = []corev1.EnvVar {
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource {
+				FieldRef: &corev1.ObjectFieldSelector {
+					FieldPath: "metadata.name",
+				},
+			},
 		},
 	}
 	spec.Containers = append(spec.Containers, c)
@@ -263,6 +272,36 @@ func addParserContainer(spec *corev1.PodSpec, parserCMName, logFilename, imageNa
 	collectorCmvs.Name = "parse-logs"
 	collectorVol.ConfigMap = &collectorCmvs
 	spec.Volumes = append(spec.Volumes, collectorVol)
+
+	foundOutputVol := false
+	for _, v := range spec.Volumes {
+		if v.Name == "output-vol" {
+			foundOutputVol = true
+			break
+		}
+	}
+	if !foundOutputVol {
+		outputVol := corev1.Volume{}
+		outputVol.Name = "output-vol"
+		outputVol.EmptyDir = &corev1.EmptyDirVolumeSource {}
+		spec.Volumes = append(spec.Volumes, outputVol)
+	}
+
+	outputVolMount := corev1.VolumeMount {
+		MountPath: "/output",
+		Name: "output-vol",
+	}
+	for i, _ := range spec.Containers {
+		foundMount := false
+		for _, v := range spec.Containers[i].VolumeMounts {
+			if v.Name == "output-vol" {
+				foundMount = true
+			}
+		}
+		if !foundMount {
+			spec.Containers[i].VolumeMounts = append(spec.Containers[i].VolumeMounts, outputVolMount)
+		}
+	}
 }
 
 func AddSyncContainerGeneric(obj runtime.Object, count int, actionName string, syncGroup string) (runtime.Object, error) {

@@ -1,16 +1,20 @@
 #!/bin/sh
 
-pid=`ps x -opid= | sed -n 2p`
-pid=`echo $pid | xargs`
-ps aux
-tail -f /proc/$pid/root/$1 > /tmp/out.1 &
-tailp=$!
+# $1 = filename
+# $2 = number of containers that need to be finished
 
-while test -d /proc/$pid; do sleep 5; done
+echo $1
+echo $2
+echo $3
 
-kill $tailp
+d=0
+while [[ $d -lt $2 ]]; do
+        sleep 5
+        d=`curl -k -X GET  -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" https://$KUBERNETES_PORT_443_TCP_ADDR:$KUBERNETES_SERVICE_PORT_HTTPS/api/v1/namespaces/default/pods/$POD_NAME | jq .status.containerStatuses | grep reason.*Completed | wc -l`
+        echo $d
+done
 
-ls -l /tmp/
-/parser/* /tmp/out.1
+ls -l /output
+/parser/* $1
 
 exit 0
