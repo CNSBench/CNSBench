@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	corev1 "k8s.io/api/core/v1"
 )
 
 type HttpPost struct {
@@ -43,7 +44,14 @@ type Rate struct {
 // specify different policies for deciding which object to delete, e.g.
 // "newest", "oldest", "random", ???
 type Snapshot struct {
+	// +optional
+	// +nullable
 	ActionName string `json:"actionName"`
+
+	// +optional
+	// +nullable
+	VolumeName string `json:"volumeName"`
+
 	SnapshotClass string `json:"snapshotClass"`
 }
 
@@ -59,12 +67,52 @@ type Scale struct {
 }
 
 type OutputFile struct {
+	// Filename of output file, as it will exist inside the workload container
 	Filename string `json:"filename"`
+
+	// Name of parser configmap.  Defaults to the null-parser if not specified,
+	// which is a no-op.
+	// +optional
+	// +nullable
 	Parser string `json:"parser"`
+
+	// If there are multiple resources created by the workload (e.g., client and
+	// server), target specifies which resource this is referring to.  See the
+	// workload spec's documentation to see what targets are available.  If none
+	// is specified, defaults to "workload"
+	// +optional
+	// +nullable
 	Target string `json:"target"`
+
+	// Name of output where the parsed file should be sent.  If not specifie,
+	// defaults to the "AllResultsOutput" setting.  It's an error if neither are
+	// set.
+	// +optional
+	// +nullable
+	Sink string `json:"sink"`
 }
 
-type CreateObj struct {
+// Creates PVCs with given name.  If count is provided, the name will be
+// name-<volume number>.  Workloads that require volumes should parameterize
+// the name of the volume, and the user should provide the name of a Volume
+// as the value.
+type Volume struct {
+	Name string `json:"name"`
+
+	// +optional
+	// +nullable
+	Count int `json:"count"`
+
+	Spec corev1.PersistentVolumeClaimSpec `json:"spec"`
+
+	// +optional
+	// +nullable
+	RateName string `json:"rateName"`
+}
+
+type Workload struct {
+	Name string `json:"name"`
+
 	Workload string `json:"workload"`
 
 	// +optional
@@ -82,14 +130,14 @@ type CreateObj struct {
 	// +optional
 	// +nullable
 	OutputFiles []OutputFile `json:"outputFiles"`
-}
-
-type Action struct {
-	Name string `json:"name"`
 
 	// +optional
 	// +nullable
-	CreateObjSpec CreateObj `json:"createObjSpec"`
+	RateName string `json:"rateName"`
+}
+
+type ControlOperation struct {
+	Name string `json:"name"`
 
 	// +optional
 	// +nullable
@@ -116,7 +164,17 @@ type BenchmarkSpec struct {
 	// +optional
 	Runtime	string `json:"runtime"`
 
-	Actions []Action `json:"actions"`
+	// +optional
+	// +nullable
+	Volumes []Volume `json:"volumes"`
+
+	// +optional
+	// +nullable
+	Workloads []Workload `json:"workloads"`
+
+	// +optional
+	// +nullable
+	ControlOperations []ControlOperation `json:"controlOperations"`
 
 	// +optional
 	// +nullable
@@ -124,7 +182,13 @@ type BenchmarkSpec struct {
 
 	// +optional
 	// +nullable
-	AllResultsOutput string `json:"allResultsOutput"`
+	AllWorkloadOutput string `json:"allWorkloadOutput"`
+
+	// Output sink for the benchmark metadata, e.g. the spec and
+	// start and completion times
+	// +optional
+	// +nullable
+	MetadataOutput string `json:"metadataOutput"`
 
 	// +optional
 	Outputs []Output `json:"outputs"`
@@ -171,7 +235,7 @@ type BenchmarkStatus struct {
 	NumCompletedObjs int `json:"numCompletedObjs"`
 
 	// This doesn't include RuneOnce actions
-	RunningActions int `json:"runningActions"`
+	RunningWorkloads int `json:"runningWorkloads"`
 	RunningRates int `json:"runningRates"`
 
 	Conditions []BenchmarkCondition `json:"conditions"`

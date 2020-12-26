@@ -77,13 +77,48 @@ func (r *ReconcileBenchmark) createObj(bm *cnsbench.Benchmark, obj runtime.Objec
 	return nil
 }
 
-func (r *ReconcileBenchmark) RunInstance(bm *cnsbench.Benchmark, cm *corev1.ConfigMap, multipleInstanceObjs []string, instanceNum int, action cnsbench.Action) ([]utils.NameKind, error) {
+func (r *ReconcileBenchmark) CreateVolume(bm *cnsbench.Benchmark, vol cnsbench.Volume) {
+	var count int
+	if vol.Count == 0 {
+		count = 1
+	} else {
+		count = vol.Count
+	}
+
+	// XXX This might be called because a rate fired, in which case there might
+	// already be a volume - need to check what the last volume number is and
+	// count from <last vol> to count+<last vol>
+	for c := 0; c < count; c++ {
+		name := vol.Name
+		if count > 1 {
+			name += "-" + strconv.Itoa(c)
+		}
+		pvc := corev1.PersistentVolumeClaim {
+			ObjectMeta: metav1.ObjectMeta {
+				Name: name,
+				Namespace: "default",
+				Labels: map[string]string {
+					"volumename": vol.Name,
+				},
+			},
+			Spec: vol.Spec,
+		}
+
+		if err := r.createObj(bm, runtime.Object(&pvc), true); err != nil {
+			log.Error(err, "Creating volume")
+		}
+	}
+}
+
+func (r *ReconcileBenchmark) RunInstance(bm *cnsbench.Benchmark, cm *corev1.ConfigMap, multipleInstanceObjs []string, instanceNum int, workload cnsbench.Workload) ([]utils.NameKind, error) {
 	ret := []utils.NameKind{}
 	for k := range cm.Data {
+		log.Info("uh")
 		if !utils.Contains(multipleInstanceObjs, k) {
+			log.Info("Continuing")
 			continue
 		}
-		nk, err := r.prepareAndRun(bm, instanceNum, k, action.Name, action.CreateObjSpec, cm, []byte(cm.Data[k]))
+		nk, err := r.prepareAndRun(bm, instanceNum, k, workload.Name, workload, cm, []byte(cm.Data[k]))
 		if err != nil {
 			return ret, err
 		}
@@ -95,7 +130,7 @@ func (r *ReconcileBenchmark) RunInstance(bm *cnsbench.Benchmark, cm *corev1.Conf
 	return ret, nil
 }
 
-func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.CreateObj, actionName string) ([]utils.NameKind, error) {
+func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Workload, workloadName string) ([]utils.NameKind, error) {
 	cm := &corev1.ConfigMap{}
 
 	err := r.client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: "library"}, cm)
@@ -114,7 +149,7 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Crea
 		}
 
 		for w := 0; w < count; w++ {
-			nk, err := r.prepareAndRun(bm, w, k, actionName, a, cm, []byte(cm.Data[k]))
+			nk, err := r.prepareAndRun(bm, w, k, workloadName, a, cm, []byte(cm.Data[k]))
 			if err != nil {
 				return ret, err
 			}
@@ -171,6 +206,12 @@ func (r *ReconcileBenchmark) createTmpParser(bm *cnsbench.Benchmark, parserName 
 }
 
 func (r *ReconcileBenchmark) addParserContainer(bm *cnsbench.Benchmark, obj runtime.Object, parser string, outfile string, num int) (runtime.Object, error) {
+	if parser == "" {
+		parser = "null-parser"
+	}
+	/* We need to do this because parser scripts are in the library namespace,
+	 * the workload is in the default namespace, and you can't attach configmaps
+	 * across namespaces.  So make a copy of the configmap in the default namespace */
 	if tmpCmName, err := r.createTmpParser(bm, parser); err != nil {
 		log.Error(err, "Error adding parser container", parser)
 		return obj, err
@@ -180,7 +221,7 @@ func (r *ReconcileBenchmark) addParserContainer(bm *cnsbench.Benchmark, obj runt
 			log.Error(err, "Error getting parser container image", parser)
 			return obj, err
 		}
-		obj, err = utils.AddParserGeneric(obj, tmpCmName, outfile, imageName, num)
+		obj, err = utils.AddParserContainer(obj, tmpCmName, outfile, imageName, num)
 		if err != nil {
 			log.Error(err, "Error adding parser container", outfile)
 			return obj, err
@@ -190,7 +231,31 @@ func (r *ReconcileBenchmark) addParserContainer(bm *cnsbench.Benchmark, obj runt
 	return obj, nil
 }
 
-func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k string, actionName string, a cnsbench.CreateObj, cm *corev1.ConfigMap, objBytes []byte) (utils.NameKind, error) {
+func (r *ReconcileBenchmark) addOutputContainer(bm *cnsbench.Benchmark, obj runtime.Object, outputName string, outputFile string) (runtime.Object, error) {
+	outputArgs := ""
+	outputContainer := "null-output"
+	for _, output := range bm.Spec.Outputs {
+		if output.Name == outputName {
+			log.Info("Matched an output", "output", output)
+			if output.HttpPostSpec.URL != "" {
+				outputContainer = "http-output"
+				outputArgs = output.HttpPostSpec.URL
+			}
+		}
+	}
+
+	obj, err := utils.AddOutputContainer(obj, outputArgs, outputContainer, outputFile)
+	if err != nil {
+		log.Error(err, "Error adding output container", outputFile)
+		return obj, err
+	}
+	log.Info("Added output container", "name", outputFile)
+
+	return obj, nil
+}
+
+/* TODO: Break this function up */
+func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k string, workloadName string, a cnsbench.Workload, cm *corev1.ConfigMap, objBytes []byte) (utils.NameKind, error) {
 	var count int
 	if a.Count == 0 {
 		count = 1
@@ -200,12 +265,12 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 
 	// Replace vars in workload spec with values from benchmark object
 	cmString := string(objBytes)
-	for k, v := range a.Vars {
-		log.Info("Searching for var", "var", k, "replacement", v)
-		cmString = strings.ReplaceAll(cmString, "{{"+k+"}}", v)
+	for variable, value := range a.Vars {
+		log.Info("Searching for var", "var", variable, "replacement", value)
+		cmString = strings.ReplaceAll(cmString, "{{"+variable+"}}", value)
 	}
-	cmString = strings.ReplaceAll(cmString, "{{ACTION_NAME}}", actionName)
-	cmString = strings.ReplaceAll(cmString, "{{ACTION_NAME_CAPS}}", strings.ToUpper(actionName))
+	cmString = strings.ReplaceAll(cmString, "{{ACTION_NAME}}", workloadName)
+	cmString = strings.ReplaceAll(cmString, "{{ACTION_NAME_CAPS}}", strings.ToUpper(workloadName))
 	cmString = strings.ReplaceAll(cmString, "{{INSTANCE_NUM}}", strconv.Itoa(w))
 	cmString = strings.ReplaceAll(cmString, "{{NUM_INSTANCES}}", strconv.Itoa(count))
 
@@ -255,7 +320,7 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 	// annotations
 	if len(a.OutputFiles) > 0 {
 		for i, output := range a.OutputFiles {
-			if role == output.Target {
+			if role == output.Target || (role == "workload" && output.Target == "") {
 				// This object needs a parser container added.  The parsers are defined in the
 				// "library" namespace, so every time a parser is used make a temporary ConfigMap
 				// in the default (TODO: should be same namespace as Benchmark obj, not necessarily
@@ -267,18 +332,33 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 				if err != nil {
 					log.Error(err, "Error adding parser container")
 				}
+				if output.Sink != "" {
+					obj, err = r.addOutputContainer(bm, obj, output.Sink, output.Filename)
+				} else {
+					obj, err = r.addOutputContainer(bm, obj, bm.Spec.AllWorkloadOutput, output.Filename)
+				}
+				if err != nil {
+					log.Error(err, "Error adding output container")
+				}
 			}
 		}
 	} else if _, exists := objAnnotations["outputFile"]; exists {
 		// TODO: Allow more than one default output file
-		r.addParserContainer(bm, obj, objAnnotations["parser"], objAnnotations["outputFile"], 0)
+		obj, err = r.addParserContainer(bm, obj, objAnnotations["parser"], objAnnotations["outputFile"], 0)
+		if err != nil {
+			log.Error(err, "Error adding parser container")
+		}
+		obj, err = r.addOutputContainer(bm, obj, bm.Spec.AllWorkloadOutput, objAnnotations["outputFile"])
+		if err != nil {
+			log.Error(err, "Error adding output container")
+		}
 	}
 
 	// Add INSTANCE_NUM env to init containers, so multiple workload instances can coordinate initialization
 	utils.SetEnvVar("INSTANCE_NUM", strconv.Itoa(w), obj)
 	utils.SetEnvVar("NUM_INSTANCES", strconv.Itoa(count), obj)
 
-	// Add actionname and multiinstance labels to object
+	// Add workloadname and multiinstance labels to object
 	labels, err := accessor.Labels(obj)
 	if err != nil {
 		log.Error(err, "Error getting labels")
@@ -289,14 +369,23 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 	if a.SyncGroup != "" {
 		labels["syncgroup"] = a.SyncGroup
 	}
-	labels["actionname"] = actionName
+	labels["workloadname"] = workloadName
+
+	var multipleInstanceObjs []string
+	if mis, found := cm.ObjectMeta.Annotations["multipleInstances"]; found {
+		multipleInstanceObjs = strings.Split(mis, ",")
+	}
+	if utils.Contains(multipleInstanceObjs, k) {
+		labels["multiinstance"] = "true"
+	}
+
 	log.Info("labels", "labels", labels)
 	accessor.SetLabels(obj, labels)
 	obj, err = utils.AddLabelsGeneric(obj, labels)
 
 	// Add sync container if sync start requested
 	if _, exists := objAnnotations["sync"]; exists {
-		obj, err = utils.AddSyncContainerGeneric(obj, a.Count, actionName, a.SyncGroup)
+		obj, err = utils.AddSyncContainer(obj, a.Count, workloadName, a.SyncGroup)
 	}
 
 	// The I/O workload author should use {{INSTANCE_NUM}} as part of an
@@ -331,7 +420,12 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 
 func (r *ReconcileBenchmark) CreateSnapshot(bm *cnsbench.Benchmark, s cnsbench.Snapshot, actionName string) error {
 	ls := &metav1.LabelSelector{}
-	ls = metav1.AddLabelToSelector(ls, "actionname", s.ActionName)
+
+	if s.ActionName != "" {
+		ls = metav1.AddLabelToSelector(ls, "workloadname", s.ActionName)
+	} else if s.VolumeName != "" {
+		ls = metav1.AddLabelToSelector(ls, "volumename", s.VolumeName)
+	}
 	selector, err := metav1.LabelSelectorAsSelector(ls)
 	if err != nil {
 		return err
@@ -352,7 +446,7 @@ func (r *ReconcileBenchmark) CreateSnapshot(bm *cnsbench.Benchmark, s cnsbench.S
 				Name: name,
 				Namespace: "default",
 				Labels: map[string]string {
-					"actionname": actionName,
+					"workloadname": actionName,
 				},
 			},
 			Spec: snapshotv1beta1.VolumeSnapshotSpec {
@@ -452,17 +546,18 @@ func (r *ReconcileBenchmark) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale) 
 	return err
 }
 
-func (r *ReconcileBenchmark) ReconcileInstances(bm *cnsbench.Benchmark, c client.Client, actions []cnsbench.Action) ([]utils.NameKind, error) {
+func (r *ReconcileBenchmark) ReconcileInstances(bm *cnsbench.Benchmark, c client.Client, workloads []cnsbench.Workload) ([]utils.NameKind, error) {
 	cm := &corev1.ConfigMap{}
 
 	ret := []utils.NameKind{}
-	for _, a := range actions {
-		if a.CreateObjSpec.Workload == "" {
+	for _, a := range workloads {
+		// XXX This should never happen now
+		if a.Workload == "" {
 			continue
 		}
 		fmt.Println(a)
 
-		err := r.client.Get(context.TODO(), client.ObjectKey{Name: a.CreateObjSpec.Workload, Namespace: "library"}, cm)
+		err := r.client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: "library"}, cm)
 		if err != nil {
 			return ret, err
 		}
@@ -472,11 +567,11 @@ func (r *ReconcileBenchmark) ReconcileInstances(bm *cnsbench.Benchmark, c client
 			multipleInstanceObjs = strings.Split(mis, ",")
 		}
 
-		// Get all pods that match actionname=true and multiinstance=true, if the number found is
+		// Get all pods that match workloadname=true and multiinstance=true, if the number found is
 		// less than a.Count, add another set of instances (i.e., instantiate all of the objects
 		// in the workload spec listed in the workload's multipleInstances annotation)
 		ls := &metav1.LabelSelector{}
-		ls = metav1.AddLabelToSelector(ls, "actionname", a.Name)
+		ls = metav1.AddLabelToSelector(ls, "workloadname", a.Name)
 		ls = metav1.AddLabelToSelector(ls, "multiinstance", "true")
 
 		selector, err := metav1.LabelSelectorAsSelector(ls)
@@ -496,9 +591,9 @@ func (r *ReconcileBenchmark) ReconcileInstances(bm *cnsbench.Benchmark, c client
 			}
 		}
 
-		if incomplete < a.CreateObjSpec.Count {
-			fmt.Println("Need new instances", a.CreateObjSpec.Count, incomplete)
-			for n := 0; n < a.CreateObjSpec.Count - incomplete; n++ {
+		if incomplete < a.Count {
+			fmt.Println("Need new instances", a.Count, incomplete)
+			for n := 0; n < a.Count - incomplete; n++ {
 				if nks, err := r.RunInstance(bm, cm, multipleInstanceObjs, len(pods.Items)+1+n, a); err != nil {
 					return ret, err
 				} else {

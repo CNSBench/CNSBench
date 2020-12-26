@@ -10,14 +10,13 @@ import (
 type OutputStruct struct {
 	Name string
 	Spec cnsbench.BenchmarkSpec
-	Results map[string]interface{}
 	StartTime int64
 	CompletionTime int64
 	InitCompletionTime int64
 }
 
-func Output(parsedOutput map[string]interface{}, outputName string, bm *cnsbench.Benchmark, startTime, completionTime, initCompletionTime int64) error {
-	o := OutputStruct{bm.ObjectMeta.Name, bm.Spec, parsedOutput, startTime, completionTime, initCompletionTime}
+func Output(outputName string, bm *cnsbench.Benchmark, startTime, completionTime, initCompletionTime int64) error {
+	o := OutputStruct{bm.ObjectMeta.Name, bm.Spec, startTime, completionTime, initCompletionTime}
 	buf := new(bytes.Buffer)
 	if err := json.NewEncoder(buf).Encode(o); err != nil {
 		return err

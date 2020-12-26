@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"context"
 	"time"
-	"strings"
-	//"encoding/json"
 
 	"github.com/cnsbench/pkg/rates"
 	"github.com/cnsbench/pkg/utils"
@@ -35,6 +33,7 @@ type BenchmarkControllerState struct {
 	//ActionControlChannels map[string]chan bool
 	ActionControlChannel chan bool
 	ControlChannel chan bool
+	// XXX Actions is not used?
 	Actions []string
 	Rates []string
 	RunningObjs []utils.NameKind
@@ -113,26 +112,24 @@ func (r *ReconcileBenchmark) cleanup(instance *cnsbench.Benchmark) error {
 	return nil
 }
 
-// Only starts actions that do not have any rates associated
-func (r *ReconcileBenchmark) startActions(instance *cnsbench.Benchmark, actions []cnsbench.Action) error {
-	instance.Status.RunningActions = 0
-	for _, a := range actions {
-		if a.RateName == "" {
-			log.Info("Run once")
-			if a.CreateObjSpec.Workload != "" {
-				objs , err := r.RunWorkload(instance, a.CreateObjSpec, a.Name)
-				if err != nil {
-					log.Error(err, "Running spec")
-					return err
-				}
-				for _, o := range objs {
-					r.state[instance.ObjectMeta.Name].RunningObjs = append(r.state[instance.ObjectMeta.Name].RunningObjs, o)
-				}
-			} else {
-				if err := r.runAction(instance, a); err != nil {
-					log.Error(err, "Error running action")
-				}
-			}
+func (r *ReconcileBenchmark) createVolumes(instance *cnsbench.Benchmark, vols []cnsbench.Volume) {
+	for _, v := range vols {
+		r.CreateVolume(instance, v)
+	}
+}
+
+// Only starts workloads that do not have any rates associated
+// XXX For now this only handles workloads
+func (r *ReconcileBenchmark) startWorkloads(instance *cnsbench.Benchmark, workloads []cnsbench.Workload) error {
+	instance.Status.RunningWorkloads = 0
+	for _, a := range workloads {
+		objs , err := r.RunWorkload(instance, a, a.Name)
+		if err != nil {
+			log.Error(err, "Running spec")
+			return err
+		}
+		for _, o := range objs {
+			r.state[instance.ObjectMeta.Name].RunningObjs = append(r.state[instance.ObjectMeta.Name].RunningObjs, o)
 		}
 	}
 	return nil
@@ -149,7 +146,7 @@ func (r *ReconcileBenchmark) startRates(instance *cnsbench.Benchmark) error {
 		} else {
 			return fmt.Errorf("Unknown kind of rate")
 		}
-		go r.runActions(instance, c, r.state[instance.ObjectMeta.Name].ControlChannel, rate.Name)
+		go r.runControlOps(instance, c, r.state[instance.ObjectMeta.Name].ControlChannel, rate.Name)
 		instance.Status.RunningRates += 1
 	}
 
@@ -162,67 +159,11 @@ func (r *ReconcileBenchmark) startRates(instance *cnsbench.Benchmark) error {
 	return nil
 }
 
-type WorkloadResult struct {
-	ActionName string
-	PodName string
-	NodeName string
-	Results string
-}
-
 func (r *ReconcileBenchmark) doOutputs(bm *cnsbench.Benchmark, startTime, completionTime, initCompletionTime int64) {
 	log.Info("Do outputs")
 
-	allResults := []WorkloadResult{}
-	for _, action := range bm.Spec.Actions {
-		workloadResults := []WorkloadResult{}
-		ls := &metav1.LabelSelector{}
-		ls = metav1.AddLabelToSelector(ls, "actionname", action.Name)
-		selector, err := metav1.LabelSelectorAsSelector(ls)
-		if err != nil {
-			log.Error(err, "Error making selector")
-			continue
-		}
-
-		pods := &corev1.PodList{}
-		if err := r.client.List(context.TODO(), pods, &client.ListOptions{Namespace: "default", LabelSelector: selector}); err != nil {
-			log.Error(err, "Error getting pods")
-			continue
-		}
-		for _, pod := range pods.Items {
-			log.Info("Getting output", "pod", pod.Name, "action", action.Name)
-			for _, c := range pod.Spec.Containers {
-				if strings.Contains(c.Name, "parser-container") {
-					out, err := utils.ReadContainerLog(pod.Name, c.Name)
-					if err != nil {
-						log.Error(err, "Reading pod output")
-						continue
-					}
-					lastLine, err := utils.GetLastLine(out)
-					if err != nil {
-						log.Error(err, "Reading getting last line")
-						continue
-					}
-					log.Info("Adding output to lists")
-					log.Info("Last line length", "len", len(lastLine))
-					workloadResults = append(workloadResults, WorkloadResult{action.Name, pod.Name, pod.Spec.NodeName, lastLine})
-					allResults = append(allResults, WorkloadResult{action.Name, pod.Name, pod.Spec.NodeName, lastLine})
-				}
-			}
-		}
-		if action.Outputs.OutputName != "" {
-			results := make(map[string]interface{})
-			results["WorkloadResults"] = workloadResults
-			if err := output.Output(results, action.Outputs.OutputName, bm, startTime, completionTime, initCompletionTime); err != nil {
-				log.Error(err, "Error sending outputs")
-			}
-		}
-	}
-
-	if bm.Spec.AllResultsOutput != "" {
-		log.Info("Output size", "size", len(allResults))
-		results := make(map[string]interface{})
-		results["AllResults"] = allResults
-		if err := output.Output(results, bm.Spec.AllResultsOutput, bm, startTime, completionTime, initCompletionTime); err != nil {
+	if bm.Spec.MetadataOutput != "" {
+		if err := output.Output(bm.Spec.MetadataOutput, bm, startTime, completionTime, initCompletionTime); err != nil {
 			log.Error(err, "Error sending outputs")
 		}
 	}
@@ -239,11 +180,11 @@ func (r *ReconcileBenchmark) stopRoutines(instance *cnsbench.Benchmark) {
 	}
 }
 
-func (r *ReconcileBenchmark) getCompletedPods(actions []cnsbench.Action, endruntime time.Time) (int, error) {
+func (r *ReconcileBenchmark) getCompletedPods(workloads []cnsbench.Workload, endruntime time.Time) (int, error) {
 	complete := 0
-	for _, a := range actions {
+	for _, a := range workloads {
 		ls := &metav1.LabelSelector{}
-		ls = metav1.AddLabelToSelector(ls, "actionname", a.Name)
+		ls = metav1.AddLabelToSelector(ls, "workloadname", a.Name)
 		ls = metav1.AddLabelToSelector(ls, "multiinstance", "true")
 
 		selector, err := metav1.LabelSelectorAsSelector(ls)
@@ -307,6 +248,10 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 		return reconcile.Result{}, nil
 	}
 
+	if instance.Spec.Outputs == nil {
+		instance.Spec.Outputs = []cnsbench.Output{}
+	}
+
 	// If our per-Benchmark obj state doesn't exist, create it
 	if _, exists := r.state[instanceName]; !exists {
 		r.state[instanceName] = &BenchmarkControllerState{make(chan bool), make(chan bool), make([]string, 0), make([]string, 0), []utils.NameKind{}}
@@ -338,7 +283,7 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 				log.Info("target completion time", "completion time", startTime.Add(runtime), "now", time.Now().Unix())
 				if time.Now().Before(startTime.Add(runtime)) {
 					log.Info("Not done yet, reconciling instances")
-					if nks, err := r.ReconcileInstances(instance, r.client, instance.Spec.Actions); err != nil {
+					if nks, err := r.ReconcileInstances(instance, r.client, instance.Spec.Workloads); err != nil {
 						log.Error(err, "Error reconciling workload instances")
 					} else {
 						for _, nk := range nks {
@@ -361,7 +306,7 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 				return reconcile.Result{}, err
 			} else if complete {
 				log.Info("Pods are complete, doing outputs")
-				instance.Status.NumCompletedObjs, _ = r.getCompletedPods(instance.Spec.Actions, runtimeEnd)
+				instance.Status.NumCompletedObjs, _ = r.getCompletedPods(instance.Spec.Workloads, runtimeEnd)
 				r.doOutputs(instance, instance.ObjectMeta.CreationTimestamp.Unix(), time.Now().Unix(), instance.Status.InitCompletionTimeUnix)
 				instance.Status.State = cnsbench.Complete
 				instance.Status.CompletionTime = metav1.Now()
@@ -380,7 +325,7 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 			}
 		}
 	} else if instance.Status.State == cnsbench.Initializing {
-		doneInit, err := utils.CheckInit(r.client, instance.Spec.Actions)
+		doneInit, err := utils.CheckInit(r.client, instance.Spec.Workloads)
 		if err != nil {
 			log.Error(err, "Error checking init")
 			return reconcile.Result{}, err
@@ -434,7 +379,8 @@ func (r *ReconcileBenchmark) Reconcile(request reconcile.Request) (reconcile.Res
 		// them to via the control channel - i.e., even if they encounter errors they just
 		// keep going
 		log.Info("", "", instance.Spec)
-		err = r.startActions(instance, instance.Spec.Actions)
+		r.createVolumes(instance, instance.Spec.Volumes)
+		err = r.startWorkloads(instance, instance.Spec.Workloads)
 		if err != nil {
 			log.Error(err, "")
 			return reconcile.Result{}, err
@@ -475,7 +421,7 @@ func (r *ReconcileBenchmark) createConstantIncreaseDecreaseRate(spec cnsbench.Co
 	return consumerChan
 }
 
-func (r *ReconcileBenchmark) runActions(bm *cnsbench.Benchmark, rateCh chan int, controlCh chan bool, rateName string) {
+func (r *ReconcileBenchmark) runControlOps(bm *cnsbench.Benchmark, rateCh chan int, controlCh chan bool, rateName string) {
 	for {
 		select {
 		case <- controlCh:
@@ -483,9 +429,26 @@ func (r *ReconcileBenchmark) runActions(bm *cnsbench.Benchmark, rateCh chan int,
 			return
 		case n:= <- rateCh:
 			log.Info("Got rate!", "n", n)
-			for _, a := range bm.Spec.Actions {
+			for _, a := range bm.Spec.Volumes {
 				if a.RateName == rateName {
-					if err := r.runAction(bm, a); err != nil {
+					r.CreateVolume(bm, a)
+				}
+			}
+			for _, a := range bm.Spec.Workloads {
+				if a.RateName == rateName {
+					objs , err := r.RunWorkload(bm, a, a.Name)
+					if err != nil {
+						log.Error(err, "Running spec")
+					}
+					for _, o := range objs {
+						// XXX Can multiple goroutines be here at the same time?  Do we need a lock?
+						r.state[bm.ObjectMeta.Name].RunningObjs = append(r.state[bm.ObjectMeta.Name].RunningObjs, o)
+					}
+				}
+			}
+			for _, a := range bm.Spec.ControlOperations {
+				if a.RateName == rateName {
+					if err := r.runControlOp(bm, a); err != nil {
 						log.Error(err, "Error running action")
 					}
 				}
@@ -494,7 +457,7 @@ func (r *ReconcileBenchmark) runActions(bm *cnsbench.Benchmark, rateCh chan int,
 	}
 }
 
-func (r *ReconcileBenchmark) runAction(bm *cnsbench.Benchmark, a cnsbench.Action) error {
+func (r *ReconcileBenchmark) runControlOp(bm *cnsbench.Benchmark, a cnsbench.ControlOperation) error {
 	log.Info("Running action", "name", a, "deletespec", metav1.FormatLabelSelector(&a.DeleteSpec.Selector))
 	if a.SnapshotSpec.SnapshotClass != "" {
 		return r.CreateSnapshot(bm, a.SnapshotSpec, a.Name)
