@@ -1,0 +1,20 @@
+apiVersion: cnsbench.example.com/v1alpha1
+kind: Benchmark
+metadata:
+  name: warmup-example
+spec:
+  workloads:
+    - name: rw
+      workload: fio-warmup-workload
+      outputFiles:
+      - filename: /output/output
+        sink: es
+      vars:
+        storageClass: obs-r1
+  outputs:
+    - name: es
+      httpPostSpec:
+        url: output-collector.default.svc.cluster.local:9999/warmup-example
+    - name: es-metadata
+      httpPostSpec:
+        url: http://output-collector.default.svc.cluster.local:9999/warmup-metadata

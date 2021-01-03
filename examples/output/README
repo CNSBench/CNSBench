@@ -1,0 +1,30 @@
+The files in this directory demonstrates different possibilities for output
+collection:
+- fio.yaml: I/O workload specification that runs the fio benchmark.  Includes
+  two parsers, single-value.py and json-parser.py:
+  - single-value.py: Calculates the total runtime by extracting the longest
+    running read and write threads' runtime from fio output, then outputs that
+    single value.
+  - json-parser.py: Parses read and write latency and bandwidth information from
+    fio output, outputs these results in a json structure.
+  Both parsers use an Alpine container image with `curl` and `jq` installed.  In
+  addition to these parsers, users may also use the null-parser to parse fio's
+  output, which does no parsing and simply outputs fio's output as is.  This can
+  be useful for debugging.
+
+  Note that fio supports reporting results in json format.  A real I/O workload
+  specification for fio would likely use this option which would simplify
+  parsing.
+- server.yaml: Runs a basic server that accepts HTTP POST requests and outputs
+  the path requested and the data that was sent.  Parsed fio output will be sent
+  here.  Watch for the output with `kubectl logs -f -lapp=output-collector`.
+- benchmark-null-parser.yaml: Runs an fio workload, parsed by the null parser.
+- benchmark-single-value.yaml: Runs an fio workload, parsed by the single-value
+  parser.
+- benchmark-json-parser.yaml: Runs an fio workload, parsed by the json parser.
+- benchmark-different-outputs.yaml: Runs two fio workloads, each parsed by the
+  single value parser, each with output sent to different endpoints.
+
+In addition to the workload output, the metadata information (the benchmark
+resource specification, start time and completion time) is also sent to the
+collection server.

@@ -1,0 +1,24 @@
+apiVersion: cnsbench.example.com/v1alpha1
+kind: Benchmark
+metadata:
+  name: fio-example-null-parser
+spec:
+  workloads:
+    - name: rw
+      workload: fio-test-workload
+      outputFiles:
+      - filename: /output/output
+        # Note that the null-parser is the default parser, so in this case the
+        # following line is not needed:
+        parser: null-parser
+        sink: es
+      vars:
+        storageClass: default
+  metadataOutput: es-metadata
+  outputs:
+    - name: es
+      httpPostSpec:
+        url: output-collector.default.svc.cluster.local:9999/fio-results
+    - name: es-metadata
+      httpPostSpec:
+        url: http://output-collector.default.svc.cluster.local:9999/fio-metadata

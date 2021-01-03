@@ -1,0 +1,23 @@
+apiVersion: cnsbench.example.com/v1alpha1
+kind: Benchmark
+metadata:
+  name: etcd-benchmark
+spec:
+  metadataOutput: es-metadata
+  workloads:
+    - name: wl1
+      workload: etcd-workload
+      count: 3
+      outputFiles:
+      - filename: /output/output
+        parser: etcd-req-parser
+        sink: es
+      vars:
+        storageClass: obs-r1
+  outputs:
+    - name: es
+      httpPostSpec:
+        url: output-collector.default.svc.cluster.local:9999/etcd-results
+    - name: es-metadata
+      httpPostSpec:
+        url: http://output-collector.default.svc.cluster.local:9999/etcd-metadata
