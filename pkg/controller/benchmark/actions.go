@@ -140,7 +140,25 @@ func (r *ReconcileBenchmark) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Work
 	}
 
 	ret := []utils.NameKind{}
+	// hack to make sure parsers are created first, they need to exist before any workload that
+	// uses them is created
 	for k := range cm.Data {
+		if !strings.Contains(k, "parse") {
+			continue
+		}
+		nk, err := r.prepareAndRun(bm, 0, k, workloadName, a, cm, []byte(cm.Data[k]))
+		if err != nil {
+			return ret, err
+		}
+		if nk != (utils.NameKind{}) {
+			ret = append(ret, nk)
+		}
+	}
+	for k := range cm.Data {
+		if strings.Contains(k, "parse") {
+			continue
+		}
+
 		var count int
 		if a.Count == 0 {
 			count = 1
@@ -221,6 +239,7 @@ func (r *ReconcileBenchmark) addParserContainer(bm *cnsbench.Benchmark, obj runt
 			log.Error(err, "Error getting parser container image", parser)
 			return obj, err
 		}
+		log.Info("Creating parser", "cmname", parser, "image", imageName)
 		obj, err = utils.AddParserContainer(obj, tmpCmName, outfile, imageName, num)
 		if err != nil {
 			log.Error(err, "Error adding parser container", outfile)
@@ -292,6 +311,7 @@ func (r *ReconcileBenchmark) prepareAndRun(bm *cnsbench.Benchmark, w int, k stri
 	decode := scheme.Codecs.UniversalDeserializer().Decode
 	obj, _, err := decode(objBytes, nil, nil)
 	if err != nil {
+		log.Info("cm", "cm", cmString)
 		log.Error(err, "Error decoding yaml")
 		return utils.NameKind{}, err
 	}
