@@ -104,7 +104,7 @@ func AddParserContainer(obj runtime.Object, parserCMName, logFilename, imageName
 	c := corev1.Container{}
 	c.Name = "parser-container"
 	c.Image = imageName
-	c.Command = []string{"sh", "-c", "/scripts/countdone.sh 1 && /scripts/parser.sh " + logFilename + " > " + logFilename + ".parsed"}
+	c.Command = []string{"sh", "-c", "/scripts/countdone.sh 1 && /scripts/parser/* " + logFilename + " > " + logFilename + ".parsed"}
 	//c.Command = []string{"sh", "-c", "tail -f /dev/null"}
 	c.VolumeMounts = []corev1.VolumeMount{
 		{
@@ -114,8 +114,8 @@ func AddParserContainer(obj runtime.Object, parserCMName, logFilename, imageName
 		},
 		{
 			//MountPath: "/scripts/parser-"+strconv.Itoa(num)+".sh",
-			MountPath: "/scripts/parser.sh",
-			SubPath: "parser.sh",
+			MountPath: "/scripts/parser",
+			//SubPath: "parser",
 			//Name: "parser"+strconv.Itoa(num),
 			Name: "parser",
 		},
