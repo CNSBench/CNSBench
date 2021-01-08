@@ -1,0 +1,7 @@
+apiVersion: cnsbench.example.com/v1
+kind: Benchmark
+metadata:
+  name: benchmark-sample
+spec:
+  # Add fields here
+  foo: bar

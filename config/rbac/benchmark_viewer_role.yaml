@@ -1,0 +1,20 @@
+# permissions for end users to view benchmarks.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: benchmark-viewer-role
+rules:
+- apiGroups:
+  - cnsbench.example.com
+  resources:
+  - benchmarks
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - cnsbench.example.com
+  resources:
+  - benchmarks/status
+  verbs:
+  - get
