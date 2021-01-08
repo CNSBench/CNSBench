@@ -1,15 +1,15 @@
 package utils
 
 import (
-	"fmt"
-	"strconv"
 	"bytes"
 	"encoding/json"
+	"fmt"
 	elasticsearch7 "github.com/elastic/go-elasticsearch/v7"
+	"strconv"
 )
 
 func QueryES(url string, query map[string]interface{}, index string, timeField string) ([]interface{}, error) {
-	cfg := elasticsearch7.Config {
+	cfg := elasticsearch7.Config{
 		Addresses: []string{url},
 		//Logger: &estransport.ColorLogger{Output: os.Stdout},
 	}
@@ -69,13 +69,13 @@ func QueryES(url string, query map[string]interface{}, index string, timeField s
 }
 
 func GetAuditLogs(start int64, end int64, url string) ([]string, error) {
-	q := map[string]interface{} {
+	q := map[string]interface{}{
 		"sort": []map[string]string{map[string]string{"@timestamp": "asc"}},
-		"query": map[string]interface{} {
-			"range": map[string]interface{} {
-				"@timestamp": map[string]interface{} {
-					"gte": strconv.FormatInt(start, 10),
-					"lte": strconv.FormatInt(end, 10),
+		"query": map[string]interface{}{
+			"range": map[string]interface{}{
+				"@timestamp": map[string]interface{}{
+					"gte":    strconv.FormatInt(start, 10),
+					"lte":    strconv.FormatInt(end, 10),
 					"format": "epoch_second",
 				},
 			},

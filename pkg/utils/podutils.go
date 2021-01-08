@@ -1,17 +1,18 @@
 package utils
 
 import (
-	"strconv"
-        "k8s.io/apimachinery/pkg/runtime"
-        "k8s.io/apimachinery/pkg/api/meta"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	//"k8s.io/apimachinery/pkg/runtime"
 	utilptr "k8s.io/utils/pointer"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"strconv"
 )
 
-func podSpec(obj runtime.Object) (*corev1.PodSpec, error) {
+func podSpec(obj client.Object) (*corev1.PodSpec, error) {
 	kind, err := meta.NewAccessor().Kind(obj)
 	if err != nil {
 		return nil, err
@@ -29,7 +30,7 @@ func podSpec(obj runtime.Object) (*corev1.PodSpec, error) {
 	return nil, nil
 }
 
-func updatePodSpec(obj runtime.Object, spec corev1.PodSpec) (runtime.Object, error) {
+func updatePodSpec(obj client.Object, spec corev1.PodSpec) (client.Object, error) {
 	kind, err := meta.NewAccessor().Kind(obj)
 	if err != nil {
 		return nil, err
@@ -37,15 +38,15 @@ func updatePodSpec(obj runtime.Object, spec corev1.PodSpec) (runtime.Object, err
 	if kind == "Job" {
 		pt := *obj.(*batchv1.Job)
 		pt.Spec.Template.Spec = spec
-		return runtime.Object(&pt), nil
+		return client.Object(&pt), nil
 	} else if kind == "Pod" {
 		pt := *obj.(*corev1.Pod)
 		pt.Spec = spec
-		return runtime.Object(&pt), nil
+		return client.Object(&pt), nil
 	} else if kind == "StatefulSet" {
 		pt := *obj.(*appsv1.StatefulSet)
 		pt.Spec.Template.Spec = spec
-		return runtime.Object(&pt), nil
+		return client.Object(&pt), nil
 	}
 	return nil, nil
 }
@@ -59,11 +60,10 @@ func volInSpec(vols []corev1.Volume, name string) bool {
 	return false
 }
 
-
 func newCMVol(name, cmName string) corev1.Volume {
 	vol := corev1.Volume{}
 	vol.Name = name
-	cm := corev1.ConfigMapVolumeSource {}
+	cm := corev1.ConfigMapVolumeSource{}
 	cm.DefaultMode = utilptr.Int32Ptr(0777)
 	cm.Name = cmName
 	vol.ConfigMap = &cm
@@ -74,13 +74,13 @@ func addOutputVol(spec *corev1.PodSpec) {
 	if !volInSpec(spec.Volumes, "output-vol") {
 		outputVol := corev1.Volume{}
 		outputVol.Name = "output-vol"
-		outputVol.EmptyDir = &corev1.EmptyDirVolumeSource {}
+		outputVol.EmptyDir = &corev1.EmptyDirVolumeSource{}
 		spec.Volumes = append(spec.Volumes, outputVol)
 	}
 
-	outputVolMount := corev1.VolumeMount {
+	outputVolMount := corev1.VolumeMount{
 		MountPath: "/output",
-		Name: "output-vol",
+		Name:      "output-vol",
 	}
 	for i, _ := range spec.Containers {
 		foundMount := false
@@ -95,7 +95,7 @@ func addOutputVol(spec *corev1.PodSpec) {
 	}
 }
 
-func AddParserContainer(obj runtime.Object, parserCMName, logFilename, imageName string, num int) (runtime.Object, error) {
+func AddParserContainer(obj client.Object, parserCMName, logFilename, imageName string, num int) (client.Object, error) {
 	spec, err := podSpec(obj)
 	if spec == nil || err != nil {
 		return nil, err
@@ -109,8 +109,8 @@ func AddParserContainer(obj runtime.Object, parserCMName, logFilename, imageName
 	c.VolumeMounts = []corev1.VolumeMount{
 		{
 			MountPath: "/scripts/countdone.sh",
-			SubPath: "countdone.sh",
-			Name: "helper",
+			SubPath:   "countdone.sh",
+			Name:      "helper",
 		},
 		{
 			//MountPath: "/scripts/parser-"+strconv.Itoa(num)+".sh",
@@ -121,14 +121,14 @@ func AddParserContainer(obj runtime.Object, parserCMName, logFilename, imageName
 		},
 		{
 			MountPath: "/output",
-			Name: "output-vol",
+			Name:      "output-vol",
 		},
 	}
-	c.Env = []corev1.EnvVar {
+	c.Env = []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
-			ValueFrom: &corev1.EnvVarSource {
-				FieldRef: &corev1.ObjectFieldSelector {
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
 					FieldPath: "metadata.name",
 				},
 			},
@@ -152,7 +152,7 @@ func AddParserContainer(obj runtime.Object, parserCMName, logFilename, imageName
 	return updatePodSpec(obj, *spec)
 }
 
-func AddSyncContainer(obj runtime.Object, count int, workloadName string, syncGroup string) (runtime.Object, error) {
+func AddSyncContainer(obj client.Object, count int, workloadName string, syncGroup string) (client.Object, error) {
 	spec, err := podSpec(obj)
 	if spec == nil || err != nil {
 		return nil, err
@@ -163,14 +163,14 @@ func AddSyncContainer(obj runtime.Object, count int, workloadName string, syncGr
 	c := corev1.Container{}
 	c.Name = "sync-container"
 	c.Image = "dwdraju/alpine-curl-jq"
-	c.Command = []string{"/scripts/ready.sh", "workloadname%3D"+workloadName, strconv.Itoa(numContainers*count)}
+	c.Command = []string{"/scripts/ready.sh", "workloadname%3D" + workloadName, strconv.Itoa(numContainers * count)}
 	if syncGroup != "" {
 		c.Command = append(c.Command, "syncgroup%3D"+syncGroup)
 	}
 	c.VolumeMounts = []corev1.VolumeMount{
 		{
 			MountPath: "/scripts/",
-			Name: "ready-script",
+			Name:      "ready-script",
 		},
 	}
 	spec.InitContainers = append(spec.InitContainers, c)
@@ -180,7 +180,7 @@ func AddSyncContainer(obj runtime.Object, count int, workloadName string, syncGr
 	return updatePodSpec(obj, *spec)
 }
 
-func AddOutputContainer(obj runtime.Object, outputArgs, outputContainer, outputFilename string) (runtime.Object, error) {
+func AddOutputContainer(obj client.Object, outputArgs, outputContainer, outputFilename string) (client.Object, error) {
 	spec, err := podSpec(obj)
 	if spec == nil || err != nil {
 		return nil, err
@@ -194,24 +194,24 @@ func AddOutputContainer(obj runtime.Object, outputArgs, outputContainer, outputF
 	c.VolumeMounts = []corev1.VolumeMount{
 		{
 			MountPath: "/scripts/countdone.sh",
-			SubPath: "countdone.sh",
-			Name: "helper",
+			SubPath:   "countdone.sh",
+			Name:      "helper",
 		},
 		{
 			MountPath: "/scripts/output.sh",
-			SubPath: "output.sh",
-			Name: "output",
+			SubPath:   "output.sh",
+			Name:      "output",
 		},
 		{
 			MountPath: "/output",
-			Name: "output-vol",
+			Name:      "output-vol",
 		},
 	}
-	c.Env = []corev1.EnvVar {
+	c.Env = []corev1.EnvVar{
 		{
 			Name: "POD_NAME",
-			ValueFrom: &corev1.EnvVarSource {
-				FieldRef: &corev1.ObjectFieldSelector {
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
 					FieldPath: "metadata.name",
 				},
 			},
@@ -232,7 +232,7 @@ func AddOutputContainer(obj runtime.Object, outputArgs, outputContainer, outputF
 	return updatePodSpec(obj, *spec)
 }
 
-func AddLabelsGeneric(obj runtime.Object, labels map[string]string) (runtime.Object, error) {
+func AddLabelsGeneric(obj client.Object, labels map[string]string) (client.Object, error) {
 	kind, err := meta.NewAccessor().Kind(obj)
 	if err != nil {
 		return nil, err
@@ -245,11 +245,11 @@ func AddLabelsGeneric(obj runtime.Object, labels map[string]string) (runtime.Obj
 			}
 		}
 		addLabels(&pt.Spec.Template.ObjectMeta, labels)
-		return runtime.Object(&pt), nil
+		return client.Object(&pt), nil
 	} else if kind == "StatefulSet" {
 		pt := *obj.(*appsv1.StatefulSet)
 		addLabels(&pt.Spec.Template.ObjectMeta, labels)
-		return runtime.Object(&pt), nil
+		return client.Object(&pt), nil
 	}
 	return obj, nil
 }
@@ -258,7 +258,7 @@ func addLabels(spec *metav1.ObjectMeta, labels map[string]string) {
 	spec.Labels = labels
 }
 
-func SetEnvVar(name, value string, obj runtime.Object) (runtime.Object, error) {
+func SetEnvVar(name, value string, obj client.Object) (client.Object, error) {
 	kind, err := meta.NewAccessor().Kind(obj)
 	if err != nil {
 		return nil, err

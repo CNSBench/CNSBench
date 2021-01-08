@@ -1,0 +1,4 @@
+## Append samples you want in your CSV to this file as resources ##
+resources:
+- cnsbench_v1_benchmark.yaml
+# +kubebuilder:scaffold:manifestskustomizesamples

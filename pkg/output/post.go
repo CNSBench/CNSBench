@@ -1,8 +1,8 @@
 package output
 
 import (
-	"fmt"
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 )

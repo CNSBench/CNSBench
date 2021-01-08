@@ -1,17 +1,17 @@
 package output
 
 import (
-	"fmt"
 	"bytes"
 	"encoding/json"
-	cnsbench "github.com/cnsbench/pkg/apis/cnsbench/v1alpha1"
+	"fmt"
+	cnsbench "github.com/cnsbench/cnsbench/api/v1alpha1"
 )
 
 type OutputStruct struct {
-	Name string
-	Spec cnsbench.BenchmarkSpec
-	StartTime int64
-	CompletionTime int64
+	Name               string
+	Spec               cnsbench.BenchmarkSpec
+	StartTime          int64
+	CompletionTime     int64
 	InitCompletionTime int64
 }
 

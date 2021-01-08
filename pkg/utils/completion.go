@@ -1,15 +1,15 @@
 package utils
 
 import (
-	"fmt"
 	"context"
+	"fmt"
+	cnsbench "github.com/cnsbench/cnsbench/api/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 	batchv1 "k8s.io/api/batch/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"k8s.io/apimachinery/pkg/types"
-        cnsbench "github.com/cnsbench/pkg/apis/cnsbench/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type NameKind struct {
@@ -32,7 +32,7 @@ func CleanupScalePods(c client.Client) error {
 
 	for _, pod := range pods.Items {
 		if pod.Status.Phase == "Succeeded" {
-			if err := c.Delete(context.TODO(), &pod); err != nil{
+			if err := c.Delete(context.TODO(), &pod); err != nil {
 				fmt.Println("Error deleting scaling pod", err)
 			}
 		}
@@ -43,7 +43,7 @@ func CleanupScalePods(c client.Client) error {
 
 func CheckInit(c client.Client, workloads []cnsbench.Workload) (bool, error) {
 	for _, a := range workloads {
-		labelSelector, err := metav1.ParseToLabelSelector("workloadname="+a.Name)
+		labelSelector, err := metav1.ParseToLabelSelector("workloadname=" + a.Name)
 		if err != nil {
 			return false, err
 		}
