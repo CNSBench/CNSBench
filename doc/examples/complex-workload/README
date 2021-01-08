@@ -1,0 +1,14 @@
+The files in this directory demonstrate a "complex" workload: a distributed
+key-value store (etcd), accessed by multiple clients.
+
+etcd.yaml contains all of the resources necessary to instantiate both clients
+and an etcd server with multiple replicas.  The resources used to instantiate
+etcd are based on the Helm charts from Bitnami[0].
+
+benchmark.yaml runs a benchmark that instantiates multiple clients, which run
+etcd's benchmark utility[1] to generate a workload.  The parser extracts the
+"requests per second" metric reported at the end of each run.  The output is
+sent to the output collection server described in examples/output.
+
+[0] https://github.com/bitnami/charts/tree/master/bitnami/etcd
+[1] https://github.com/etcd-io/etcd/tree/master/tools/benchmark

@@ -1,0 +1,53 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: quickstart-filebench
+  namespace: library
+  labels:
+    type: workload
+  annotations:
+    cnsbench.default.workload: mongo
+    cnsbench.default.storageClass: local-storage
+    cnsbench.default.volname: vol-{{ACTION_NAME}}-{{INSTANCE_NUM}}
+data:
+  pvc.yaml: |
+    kind: PersistentVolumeClaim
+    apiVersion: v1
+    metadata:
+      name: vol-{{ACTION_NAME}}-{{INSTANCE_NUM}}
+      namespace: default
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      storageClassName: {{storageClass}}
+      resources:
+        requests:
+          storage: 5Gi
+  workload.yaml: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: fb-{{ACTION_NAME}}-{{INSTANCE_NUM}}
+      namespace: default
+      annotations:
+        sync: "1"
+        role: workload
+        outputFile: /output/output
+        parser: null-parser
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - image: kubes1:5000/cnsb/filebench
+            imagePullPolicy: IfNotPresent
+            name: filebench
+            command: ["sh", "-c", "filebench -f /usr/local/share/filebench/workloads/{{workload}}.f | tee /output/output"]
+            volumeMounts:
+              - mountPath: /var/data/
+                name: data
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: {{volname}}

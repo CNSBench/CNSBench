@@ -1,0 +1,174 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fio-test-workload
+  namespace: library
+  labels:
+    type: workload
+  annotations:
+    cnsbench.default.initConfig: fio-rw-initconfig
+    cnsbench.default.config: fio-rw-config
+    cnsbench.default.rw: rw
+    cnsbench.default.pctread: "50"
+    cnsbench.default.fiosize: 6g
+    cnsbench.default.pvcsize: 7Gi
+data:
+  fio-elapsed-time-parser.yaml: |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: fio-elapsed-time-parser
+      namespace: library
+      labels:
+        type: parser
+      annotations:
+        container: helper
+    data:
+      single-value.py: |
+        #!/usr/bin/env python
+        import re
+        import sys
+        try:
+          rtime = 0
+          wtime = 0
+          with open(sys.argv[1]) as f:
+            for l in f:
+              if 'READ' in l:
+                rtime = re.search(r"run=(\d+)-", l).group(1)
+              if 'WRITE' in l:
+                wtime = re.search(r"run=(\d+)-", l).group(1)
+          print(int(rtime)+int(wtime))
+        except Exception as e:
+          print(e)
+  fio-json-parser.yaml: |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: fio-json-parser
+      namespace: library
+      labels:
+        type: parser
+      annotations:
+        container: helper
+    data:
+      json-parser.py: |
+        #!/usr/bin/env python
+        
+        import re
+        import sys
+        import json
+        
+        r = {'r': {}, 'w': {}}
+        with open(sys.argv[1]) as f:
+          for l in f:
+            if 'IOPS' in l:
+              key = 'r' if 'read' in l else 'w'
+            elif l.strip().startswith('bw'):
+              r[key]['bw'] = {k: v for k, v in re.findall(r"\s(\w+)=\s*([\d.]+),", l)}
+            elif l.strip().startswith('lat') and 'lat' not in r[key]:
+              r[key]['lat'] = {k: v for k, v in re.findall(r"\s(\w+)=\s*([\d.]+),", l)}
+        print(json.dumps(r))
+  pvc.yaml: |
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: vol-{{ACTION_NAME}}-{{INSTANCE_NUM}}
+      namespace: default
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: {{pvcsize}}
+      storageClassName: {{storageClass}}
+      volumeMode: Filesystem
+  initconfig.yaml: |
+    apiVersion: v1
+    data:
+      fio-rw-initconfig: |
+        [global]
+        filename=/var/data/testfile
+        size={{fiosize}}
+
+        [test]
+        rw=write
+        nrfiles=1
+        ioengine=libaio
+        blocksize=1M
+        time_based
+        runtime=1s
+    kind: ConfigMap
+    metadata:
+      name: fio-rw-initconfig
+      namespace: default
+  config.yaml: |
+    apiVersion: v1
+    data:
+      fio-rw-config: |
+        [global]
+        filename=/var/data/testfile
+        size={{fiosize}}
+
+        [test]
+        rw={{rw}}
+        rwmixread={{pctread}}
+        nrfiles=1
+        blocksize=1M
+        time_based
+        runtime=20s
+    kind: ConfigMap
+    metadata:
+      name: fio-rw-config
+      namespace: default
+  workload.yaml: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: fio-{{ACTION_NAME}}-{{INSTANCE_NUM}}
+      namespace: default
+      annotations:
+        sync: "1"
+        role: workload
+        outputFile: /output/output.json
+        parser: null-parser
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          initContainers:
+          - image: fio
+            imagePullPolicy: IfNotPresent
+            name: init-fio
+            command: ["fio", "/var/config/config"]
+            volumeMounts:
+              - mountPath: /var/data/
+                name: data
+              - mountPath: /var/config/
+                name: initconfig
+          containers:
+          - image: fio
+            imagePullPolicy: IfNotPresent
+            name: fio
+            command: ["sh", "-c", "fio /var/config/config | tee /output/output"]
+            volumeMounts:
+              - mountPath: /var/data/
+                name: data
+              - mountPath: /var/config/
+                name: config
+          volumes:
+          - name: data
+            persistentVolumeClaim:
+              claimName: {{volname}}
+          - name: config
+            configMap:
+              name: {{config}}
+              items:
+              - key: {{config}}
+                path: config
+          - name: initconfig
+            configMap:
+              name: {{initConfig}}
+              items:
+              - key: {{initConfig}}
+                path: config

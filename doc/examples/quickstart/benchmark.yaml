@@ -1,0 +1,19 @@
+apiVersion: cnsbench.example.com/v1alpha1
+kind: Benchmark
+metadata:
+  name: quickstart-benchmark
+spec:
+  workloads:
+    - name: quickstart
+      workload: quickstart-filebench
+      outputFiles:
+      - filename: /output/output
+        parser: null-parser
+        target: workload
+        sink: es
+      vars:
+        storageClass: local-storage
+  outputs:
+    - name: es
+      httpPostSpec:
+        url: output-collector.default.svc.cluster.local:9999/ex1

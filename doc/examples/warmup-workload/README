@@ -1,0 +1,8 @@
+The files in this directory demonstrate running a workload that requires a
+warmup period:
+- fio.yaml: I/O workload specification that runs the fio benchmark.  Uses an
+  init container to warmup the system under test.  CNSBench can synchronize
+  multiple workloads so that the primary workload only begins after all warmup
+  workloads have completed.
+- benchmark.yaml: Benchmark that runs the fio workload.  Uses the output
+  collector server described in examples/output/
