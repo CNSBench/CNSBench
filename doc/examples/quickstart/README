@@ -9,5 +9,4 @@ Apply server.yaml to start a simple output collection server.
 4. Create the volume (`kubectl apply -f pv.yaml`)
 5. Install the quickstart workload in your Workload Library (`kubectl apply -f workload.yaml`)
 6. Run the server where the output will be sent (`kubectl apply -f server.yaml`)
-<<< Need to start CNSBench...
 7. Run the benchmark (`kubectl apply -f benchmark.yaml`)
