@@ -71,6 +71,10 @@ type BenchmarkReconciler struct {
 // +kubebuilder:rbac:groups=cnsbench.example.com,resources=benchmarks,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=cnsbench.example.com,resources=benchmarks/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=cnsbench.example.com,resources=benchmarks/finalizers,verbs=update
+// +kubebuilder:rbac:groups=core,namespace=default,resources=services/finalizers;services;pods;endpoints;persistentvolumeclaims;events;configmaps;secrets,verbs=create;delete;get;list;patch;update;watch
+// +kubebuilder:rbac:groups=apps,namespace=default,resources=deployments;daemonsets;replicasets;statefulsets,verbs=create;delete;get;list;patch;update;watch
+// +kubebuilder:rbac:groups=batch,namespace=default,resources=jobs,verbs=create;delete;get;list;patch;update;watch
+// +kubebuilder:rbac:groups=batch,resources=jobs,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups=core,resources=services/finalizers;services;pods;endpoints;persistentvolumeclaims;events;configmaps;secrets,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments;daemonsets;replicasets;statefulsets,verbs=create;delete;get;list;patch;update;watch
 
