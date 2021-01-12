@@ -12,7 +12,7 @@ endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 # Image URL to use all building/pushing image targets
-IMG ?= controller:latest
+IMG ?= cnsbench/controller:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 
@@ -43,6 +43,12 @@ run: generate fmt vet manifests
 # Install CRDs into a cluster
 install: manifests kustomize
 	$(KUSTOMIZE) build config/crd | kubectl apply -f -
+
+output: manifests kustomize
+	$(KUSTOMIZE) build config/crd > output/cnsbench_operator.yaml
+	echo "---" >> output/cnsbench_operator.yaml
+	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+	$(KUSTOMIZE) build config/default >> output/cnsbench_operator.yaml
 
 # Uninstall CRDs from a cluster
 uninstall: manifests kustomize
