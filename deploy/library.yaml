@@ -1,4 +1,12 @@
 apiVersion: v1
+kind: Namespace
+metadata:
+  name: library
+spec:
+  finalizers:
+  - kubernetes
+---
+apiVersion: v1
 data:
   pvc.yaml: |
     kind: PersistentVolumeClaim
