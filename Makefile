@@ -44,11 +44,11 @@ run: generate fmt vet manifests
 install: manifests kustomize
 	$(KUSTOMIZE) build config/crd | kubectl apply -f -
 
-output: manifests kustomize
-	$(KUSTOMIZE) build config/crd > output/cnsbench_operator.yaml
-	echo "---" >> output/cnsbench_operator.yaml
+write-manifests: manifests kustomize
+	$(KUSTOMIZE) build config/crd > deploy/cnsbench_operator.yaml
+	echo "---" >> deploy/cnsbench_operator.yaml
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
-	$(KUSTOMIZE) build config/default >> output/cnsbench_operator.yaml
+	$(KUSTOMIZE) build config/default >> deploy/cnsbench_operator.yaml
 
 # Uninstall CRDs from a cluster
 uninstall: manifests kustomize
