@@ -421,7 +421,7 @@ data:
         spec:
           restartPolicy: Never
           containers:
-          - image: etcd-benchmark
+          - image: cnsbench/etcd-benchmark:latest
             imagePullPolicy: IfNotPresent
             name: etcd-benchmark-client
             command: ["sh", "-c", "benchmark --endpoints=cnsbtesting-etcd-{{ACTION_NAME}}.default.svc.cluster.local:2379 --conns=1 --clients=1 put --key-size=8 --sequential-keys --total=1000 --val-size=256 --user root:${ETCD_ROOT_PASSWORD} 2>&1 | tee /output/output"]

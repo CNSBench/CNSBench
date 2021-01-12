@@ -40,7 +40,7 @@ data:
         spec:
           restartPolicy: Never
           containers:
-          - image: kubes1:5000/cnsb/filebench
+          - image: cnsbench/filebench:latest
             imagePullPolicy: IfNotPresent
             name: filebench
             command: ["sh", "-c", "filebench -f /usr/local/share/filebench/workloads/{{workload}}.f | tee /output/output"]

@@ -188,7 +188,7 @@ func AddOutputContainer(obj client.Object, outputArgs, outputContainer, outputFi
 
 	c := corev1.Container{}
 	c.Name = "output-container"
-	c.Image = "kubes1:5000/cnsb/helper"
+	c.Image = "cnsbench/utility:latest"
 	c.Command = []string{"sh", "-c", "/scripts/countdone.sh 2 && /scripts/output.sh " + outputFilename + ".parsed " + outputArgs}
 	//c.Command = []string{"sh", "-c", "tail -f /dev/null"}
 	c.VolumeMounts = []corev1.VolumeMount{

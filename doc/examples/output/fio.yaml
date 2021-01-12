@@ -137,7 +137,7 @@ data:
         spec:
           restartPolicy: Never
           initContainers:
-          - image: fio
+          - image: cnsbench/fio:latest
             imagePullPolicy: IfNotPresent
             name: init-fio
             command: ["fio", "/var/config/config"]
@@ -147,7 +147,7 @@ data:
               - mountPath: /var/config/
                 name: initconfig
           containers:
-          - image: fio
+          - image: cnsbench/fio:latest
             imagePullPolicy: IfNotPresent
             name: fio
             command: ["sh", "-c", "fio /var/config/config | tee /output/output"]
