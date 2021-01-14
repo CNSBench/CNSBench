@@ -6,11 +6,34 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	//"k8s.io/apimachinery/pkg/runtime"
 	utilptr "k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strconv"
 )
+
+func CleanupScalePods(c client.Client) error {
+	ls := &metav1.LabelSelector{}
+	ls = metav1.AddLabelToSelector(ls, "app", "scale-pod")
+
+	selector, err := metav1.LabelSelectorAsSelector(ls)
+	if err != nil {
+		return err
+	}
+	pods := &corev1.PodList{}
+	if err := c.List(context.TODO(), pods, &client.ListOptions{Namespace: "default", LabelSelector: selector}); err != nil {
+		return err
+	}
+
+	for _, pod := range pods.Items {
+		if pod.Status.Phase == "Succeeded" {
+			if err := c.Delete(context.TODO(), &pod); err != nil {
+				fmt.Println("Error deleting scaling pod", err)
+			}
+		}
+	}
+
+	return nil
+}
 
 func podSpec(obj client.Object) (*corev1.PodSpec, error) {
 	kind, err := meta.NewAccessor().Kind(obj)

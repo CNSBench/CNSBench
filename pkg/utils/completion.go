@@ -17,30 +17,6 @@ type NameKind struct {
 	Kind string
 }
 
-func CleanupScalePods(c client.Client) error {
-	ls := &metav1.LabelSelector{}
-	ls = metav1.AddLabelToSelector(ls, "app", "scale-pod")
-
-	selector, err := metav1.LabelSelectorAsSelector(ls)
-	if err != nil {
-		return err
-	}
-	pods := &corev1.PodList{}
-	if err := c.List(context.TODO(), pods, &client.ListOptions{Namespace: "default", LabelSelector: selector}); err != nil {
-		return err
-	}
-
-	for _, pod := range pods.Items {
-		if pod.Status.Phase == "Succeeded" {
-			if err := c.Delete(context.TODO(), &pod); err != nil {
-				fmt.Println("Error deleting scaling pod", err)
-			}
-		}
-	}
-
-	return nil
-}
-
 func CheckInit(c client.Client, workloads []cnsbench.Workload) (bool, error) {
 	for _, a := range workloads {
 		labelSelector, err := metav1.ParseToLabelSelector("workloadname=" + a.Name)
