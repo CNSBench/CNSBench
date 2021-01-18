@@ -18,6 +18,8 @@ package controllers
 
 import (
 	"context"
+	"errors"
+	"time"
 
 	"github.com/go-logr/logr"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -26,46 +28,28 @@ import (
 
 	cnsbench "github.com/cnsbench/cnsbench/api/v1alpha1"
 
-	"fmt"
-	"time"
-
 	"github.com/cnsbench/cnsbench/pkg/output"
 	"github.com/cnsbench/cnsbench/pkg/rates"
 	"github.com/cnsbench/cnsbench/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	//"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	//"sigs.k8s.io/controller-runtime/pkg/handler"
-	//logf "sigs.k8s.io/controller-runtime/pkg/log"
-	//"sigs.k8s.io/controller-runtime/pkg/manager"
-	//"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	//"sigs.k8s.io/controller-runtime/pkg/source"
-	//snapshotscheme "github.com/kubernetes-csi/external-snapshotter/v2/pkg/client/clientset/versioned/scheme"
-	//"k8s.io/client-go/kubernetes/scheme"
 )
 
 type BenchmarkControllerState struct {
 	// Send "true" to these when it's time to exit
-	//ControlChannels map[string]chan bool
-	//ActionControlChannels map[string]chan bool
-	ActionControlChannel chan bool
-	ControlChannel       chan bool
-	// XXX Actions is not used?
-	Actions     []string
-	Rates       []string
-	RunningObjs []utils.NameKind
+	ControlChannel chan bool
 }
 
 // BenchmarkReconciler reconciles a Benchmark object
 type BenchmarkReconciler struct {
 	client.Client
-	Log        logr.Logger
-	Scheme     *runtime.Scheme
-	state      map[string]*BenchmarkControllerState
-	controller controller.Controller
+	Log             logr.Logger
+	Scheme          *runtime.Scheme
+	controlChannels map[string](chan bool)
+	controller      controller.Controller
 }
 
 // +kubebuilder:rbac:groups=cnsbench.example.com,resources=benchmarks,verbs=get;list;watch;create;update;patch;delete
@@ -91,8 +75,6 @@ func (r *BenchmarkReconciler) cleanup(instance *cnsbench.Benchmark) error {
 	}
 	r.Log.Info("Done Deleting", "finalizers", instance.GetFinalizers())
 
-	r.state[instance.ObjectMeta.Name].RunningObjs = []utils.NameKind{}
-
 	return nil
 }
 
@@ -103,17 +85,12 @@ func (r *BenchmarkReconciler) createVolumes(instance *cnsbench.Benchmark, vols [
 }
 
 // Only starts workloads that do not have any rates associated
-// XXX For now this only handles workloads
 func (r *BenchmarkReconciler) startWorkloads(instance *cnsbench.Benchmark, workloads []cnsbench.Workload) error {
 	instance.Status.RunningWorkloads = 0
 	for _, a := range workloads {
-		objs, err := r.RunWorkload(instance, a, a.Name)
-		if err != nil {
+		if err := r.RunWorkload(instance, a, a.Name); err != nil {
 			r.Log.Error(err, "Running spec")
 			return err
-		}
-		for _, o := range objs {
-			r.state[instance.ObjectMeta.Name].RunningObjs = append(r.state[instance.ObjectMeta.Name].RunningObjs, o)
 		}
 	}
 	return nil
@@ -124,13 +101,15 @@ func (r *BenchmarkReconciler) startRates(instance *cnsbench.Benchmark) error {
 	var c chan int
 	for _, rate := range instance.Spec.Rates {
 		if rate.ConstantRateSpec.Interval != 0 {
-			c = r.createConstantRate(rate.ConstantRateSpec, r.state[instance.ObjectMeta.Name].ControlChannel)
+			c = r.createConstantRate(rate.ConstantRateSpec, r.controlChannels[instance.ObjectMeta.Name])
 		} else if rate.ConstantIncreaseDecreaseRateSpec.IncInterval != 0 {
-			c = r.createConstantIncreaseDecreaseRate(rate.ConstantIncreaseDecreaseRateSpec, r.state[instance.ObjectMeta.Name].ControlChannel)
+			c = r.createConstantIncreaseDecreaseRate(rate.ConstantIncreaseDecreaseRateSpec, r.controlChannels[instance.ObjectMeta.Name])
 		} else {
-			return fmt.Errorf("Unknown kind of rate")
+			unknownRate := errors.New("Unknown rate")
+			r.Log.Error(unknownRate, rate.Name)
+			return unknownRate
 		}
-		go r.runControlOps(instance, c, r.state[instance.ObjectMeta.Name].ControlChannel, rate.Name)
+		go r.runControlOps(instance, c, r.controlChannels[instance.ObjectMeta.Name], rate.Name)
 		instance.Status.RunningRates += 1
 	}
 
@@ -159,8 +138,8 @@ func (r *BenchmarkReconciler) stopRoutines(instance *cnsbench.Benchmark) {
 		// For every rate there's the routine for the rate itself and the routine
 		// that listens for the rate and runs actions.  So send two messages for
 		// each rate we have running
-		r.state[instanceName].ControlChannel <- true
-		r.state[instanceName].ControlChannel <- true
+		r.controlChannels[instanceName] <- true
+		r.controlChannels[instanceName] <- true
 	}
 }
 
@@ -169,7 +148,7 @@ func (r *BenchmarkReconciler) getCompletedPods(workloads []cnsbench.Workload, en
 	for _, a := range workloads {
 		ls := &metav1.LabelSelector{}
 		ls = metav1.AddLabelToSelector(ls, "workloadname", a.Name)
-		ls = metav1.AddLabelToSelector(ls, "multiinstance", "true")
+		ls = metav1.AddLabelToSelector(ls, "duplicate", "true")
 
 		selector, err := metav1.LabelSelectorAsSelector(ls)
 		if err != nil {
@@ -197,6 +176,24 @@ func (r *BenchmarkReconciler) getCompletedPods(workloads []cnsbench.Workload, en
 	return complete, nil
 }
 
+func (r *BenchmarkReconciler) updateInstanceStatus(instance *cnsbench.Benchmark) error {
+	if err := r.Client.Status().Update(context.TODO(), instance); err != nil {
+		r.Log.Error(err, "Updating instance")
+		r.cleanup(instance)
+		return err
+	}
+	return nil
+}
+
+func (r *BenchmarkReconciler) updateInstance(instance *cnsbench.Benchmark) error {
+	if err := r.Client.Update(context.TODO(), instance); err != nil {
+		r.Log.Error(err, "Updating instance")
+		r.cleanup(instance)
+		return err
+	}
+	return nil
+}
+
 func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
 	r.Log.Info("Reconciling Benchmark")
 
@@ -204,7 +201,7 @@ func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	instance := &cnsbench.Benchmark{}
 	err := r.Client.Get(context.TODO(), request.NamespacedName, instance)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if k8serrors.IsNotFound(err) {
 			r.Log.Info("Not found")
 			return ctrl.Result{}, nil
 		}
@@ -216,11 +213,11 @@ func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	// Is it being deleted?
 	if instance.GetDeletionTimestamp() != nil {
 		r.Log.Info("Being deleted")
-		if _, exists := r.state[instanceName]; exists {
+		if _, exists := r.controlChannels[instanceName]; exists {
 			if err := r.cleanup(instance); err != nil {
 				return ctrl.Result{}, err
 			}
-			delete(r.state, instance.ObjectMeta.Name)
+			delete(r.controlChannels, instance.ObjectMeta.Name)
 			r.Log.Info("Deleted from r.state", "", instance.ObjectMeta.Name)
 		}
 		return ctrl.Result{}, nil
@@ -231,130 +228,89 @@ func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		return ctrl.Result{}, nil
 	}
 
+	// Outputs aren't required, but if the user creates a Benchmark without any and then
+	// we try to update the instance with Outputs == nil we get an error?
 	if instance.Spec.Outputs == nil {
 		instance.Spec.Outputs = []cnsbench.Output{}
-	}
-
-	// If our per-Benchmark obj state doesn't exist, create it
-	if _, exists := r.state[instanceName]; !exists {
-		r.state[instanceName] = &BenchmarkControllerState{make(chan bool), make(chan bool), make([]string, 0), make([]string, 0), []utils.NameKind{}}
 	}
 
 	// if we're here, then we're either still running or haven't started yet
 	if instance.Status.State == cnsbench.Running {
 		// If we're running, and there's a runtime set, check if we've reached the runtime
 		// And if not, check that we still have the correct number of workload instances running.
-
-		if err := utils.CleanupScalePods(r.Client); err != nil {
-			r.Log.Error(err, "Cleaning up scale pods")
+		runtimeEnd := time.Now()
+		if instance.Spec.Runtime != "" && time.Now().Before(instance.Status.TargetCompletionTime.Time) {
+			r.Log.Info("Before target completion time", "completion time", instance.Status.TargetCompletionTime, "now", time.Now().Unix())
+			return ctrl.Result{}, err
 		}
 
-		runtimeEnd := time.Now()
-		doneRuntime := false
+		// If we're running and there's no runtime set, check if the workloads are complete
+		r.Log.Info("Checking status...")
+		complete := true
+		for _, w := range instance.Spec.Workloads {
+			workloadComplete, err := CheckCompletion(r.Client, w.Name)
+			if err != nil {
+				r.Log.Error(err, "Error checking Job status")
+				return ctrl.Result{}, err
+			} else if !workloadComplete {
+				complete = false
+				break
+			}
+		}
+		if !complete {
+			return ctrl.Result{}, err
+		}
+
+		r.Log.Info("Pods are complete, doing outputs")
+		instance.Status.NumCompletedObjs, _ = r.getCompletedPods(instance.Spec.Workloads, runtimeEnd)
+		r.doOutputs(instance, instance.ObjectMeta.CreationTimestamp.Unix(), time.Now().Unix(), instance.Status.InitCompletionTimeUnix)
+
+		instance.Status.State = cnsbench.Complete
+		instance.Status.CompletionTime = metav1.Now()
+		instance.Status.CompletionTimeUnix = time.Now().Unix()
+		instance.Status.StartTimeUnix = instance.ObjectMeta.CreationTimestamp.Unix()
+		instance.Status.Conditions[0] = cnsbench.BenchmarkCondition{LastTransitionTime: metav1.Now(), Status: "True", Type: "Complete"}
+
+		if err := r.updateInstanceStatus(instance); err != nil {
+			return ctrl.Result{}, err
+		}
+		r.Log.Info("Updated status")
+		if err := r.cleanup(instance); err != nil {
+			return ctrl.Result{}, err
+		}
+	} else if instance.Status.State == cnsbench.Initializing {
+		doneInit, err := CheckInit(r.Client, instance.Spec.Workloads)
+		if err != nil {
+			r.Log.Error(err, "Error checking init")
+			return ctrl.Result{}, err
+		} else if !doneInit {
+			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+		}
+
+		// init done, start rates and reconcile workloads:
+		err = r.startRates(instance)
+		if err != nil {
+			r.stopRoutines(instance)
+			return ctrl.Result{}, err
+		}
+
+		instance.Status.State = cnsbench.Running
+		instance.Status.InitCompletionTime = metav1.Now()
+		instance.Status.InitCompletionTimeUnix = time.Now().Unix()
+
 		if instance.Spec.Runtime != "" {
 			if runtime, err := time.ParseDuration(instance.Spec.Runtime); err != nil {
 				r.Log.Error(err, "Error parsing duration")
 			} else {
-				//r.Log.Info("target completion time", "completion time", time.Unix(instance.Status.InitCompletionTimeUnix, 0).Add(runtime), "now", time.Now().Unix())
-				// Can count runtime from init complete or start.  Only do from start for now...
-				var startTime time.Time
-				if true {
-					startTime = instance.ObjectMeta.CreationTimestamp.Time
-				} else {
-					startTime = instance.Status.InitCompletionTime.Time
-				}
-				r.Log.Info("target completion time", "completion time", startTime.Add(runtime), "now", time.Now().Unix())
-				if time.Now().Before(startTime.Add(runtime)) {
-					r.Log.Info("Not done yet, reconciling instances")
-					if nks, err := r.ReconcileInstances(instance, r.Client, instance.Spec.Workloads); err != nil {
-						r.Log.Error(err, "Error reconciling workload instances")
-					} else {
-						for _, nk := range nks {
-							r.state[instanceName].RunningObjs = append(r.state[instanceName].RunningObjs, nk)
-						}
-					}
-				} else {
-					r.Log.Info("Runtime done!")
-					runtimeEnd = startTime.Add(runtime)
-					doneRuntime = true
-				}
+				instance.Status.TargetCompletionTime = metav1.NewTime(instance.Status.InitCompletionTime.Time.Add(runtime))
 			}
 		}
-		if instance.Spec.Runtime == "" || doneRuntime {
-			// If we're running and there's no runtime set, check if the workloads are complete
-			r.Log.Info("Checking status...")
-			complete, err := utils.CheckCompletion(r.Client, r.state[instanceName].RunningObjs)
-			if err != nil {
-				r.Log.Error(err, "Error checking Job status")
-				return ctrl.Result{}, err
-			} else if complete {
-				r.Log.Info("Pods are complete, doing outputs")
-				instance.Status.NumCompletedObjs, _ = r.getCompletedPods(instance.Spec.Workloads, runtimeEnd)
-				r.doOutputs(instance, instance.ObjectMeta.CreationTimestamp.Unix(), time.Now().Unix(), instance.Status.InitCompletionTimeUnix)
-				instance.Status.State = cnsbench.Complete
-				instance.Status.CompletionTime = metav1.Now()
-				instance.Status.CompletionTimeUnix = time.Now().Unix()
-				instance.Status.StartTimeUnix = instance.ObjectMeta.CreationTimestamp.Unix()
-				instance.Status.Conditions[0] = cnsbench.BenchmarkCondition{LastTransitionTime: metav1.Now(), Status: "True", Type: "Complete"}
-				if err := r.Client.Status().Update(context.TODO(), instance); err != nil {
-					r.Log.Error(err, "Updating instance")
-					return ctrl.Result{}, err
-				}
-				r.Log.Info("Updated status")
-				if err := r.cleanup(instance); err != nil {
-					r.Log.Error(err, "Error cleaning up")
-					return ctrl.Result{}, err
-				}
-			}
-		}
-	} else if instance.Status.State == cnsbench.Initializing {
-		doneInit, err := utils.CheckInit(r.Client, instance.Spec.Workloads)
-		if err != nil {
-			r.Log.Error(err, "Error checking init")
+
+		if err := r.updateInstanceStatus(instance); err != nil {
 			return ctrl.Result{}, err
 		}
-		if instance.Spec.Runtime != "" {
-			doneInit = true
-		}
-		if doneInit {
-			err = r.startRates(instance)
-			if err != nil {
-				r.stopRoutines(instance)
-				r.Log.Error(err, "")
-				return ctrl.Result{}, err
-			}
-			// if we're here we started everything successfully
-			instance.Status.State = cnsbench.Running
-			instance.Status.InitCompletionTime = metav1.Now()
-			instance.Status.InitCompletionTimeUnix = time.Now().Unix()
-			if err := r.Client.Status().Update(context.TODO(), instance); err != nil {
-				r.Log.Error(err, "Updating instance")
-				r.cleanup(instance)
-				return ctrl.Result{}, err
-			}
-			if err := r.Client.Update(context.TODO(), instance); err != nil {
-				r.Log.Error(err, "Updating instance")
-				r.cleanup(instance)
-				return ctrl.Result{}, err
-			}
-
-			if instance.Spec.Runtime != "" {
-				if runtime, err := time.ParseDuration(instance.Spec.Runtime); err != nil {
-					r.Log.Error(err, "")
-				} else {
-					r.Log.Info("runtime", "runtime", runtime)
-					// If runtime should be started from benchmark creation rather than
-					// when init completes, subtract current time - start time from runtime
-					if true {
-						elapsedTime := time.Now().Sub(instance.ObjectMeta.CreationTimestamp.Time)
-						runtime -= elapsedTime
-						r.Log.Info("times", "runtime", runtime, "elapsed", elapsedTime)
-					}
-					return ctrl.Result{RequeueAfter: runtime}, nil
-				}
-			}
-		} else {
-			return ctrl.Result{RequeueAfter: time.Second * 5}, nil
+		if err := r.updateInstance(instance); err != nil {
+			return ctrl.Result{}, err
 		}
 	} else {
 		// if we're not running and we're not complete, we must need to be started
@@ -362,25 +318,23 @@ func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		// them to via the control channel - i.e., even if they encounter errors they just
 		// keep going
 		r.Log.Info("", "", instance.Spec)
+
 		r.createVolumes(instance, instance.Spec.Volumes)
-		err = r.startWorkloads(instance, instance.Spec.Workloads)
-		if err != nil {
-			r.Log.Error(err, "")
+		if err = r.startWorkloads(instance, instance.Spec.Workloads); err != nil {
 			return ctrl.Result{}, err
 		}
+
 		// if we're here we started everything successfully
 		instance.Status.State = cnsbench.Initializing
 		instance.Status.Conditions = []cnsbench.BenchmarkCondition{{LastTransitionTime: metav1.Now(), Status: "False", Type: "Complete"}}
-		if err := r.Client.Status().Update(context.TODO(), instance); err != nil {
-			r.Log.Error(err, "Updating instance")
-			r.cleanup(instance)
+
+		if err := r.updateInstanceStatus(instance); err != nil {
 			return ctrl.Result{}, err
 		}
-		if err := r.Client.Update(context.TODO(), instance); err != nil {
-			r.Log.Error(err, "Updating instance")
-			r.cleanup(instance)
+		if err := r.updateInstance(instance); err != nil {
 			return ctrl.Result{}, err
 		}
+
 		// Want to check right away if we're done initializing so requeue
 		return ctrl.Result{Requeue: true}, nil
 	}
@@ -419,13 +373,8 @@ func (r *BenchmarkReconciler) runControlOps(bm *cnsbench.Benchmark, rateCh chan 
 			}
 			for _, a := range bm.Spec.Workloads {
 				if a.RateName == rateName {
-					objs, err := r.RunWorkload(bm, a, a.Name)
-					if err != nil {
+					if err := r.RunWorkload(bm, a, a.Name); err != nil {
 						r.Log.Error(err, "Running spec")
-					}
-					for _, o := range objs {
-						// XXX Can multiple goroutines be here at the same time?  Do we need a lock?
-						r.state[bm.ObjectMeta.Name].RunningObjs = append(r.state[bm.ObjectMeta.Name].RunningObjs, o)
 					}
 				}
 			}
@@ -457,13 +406,10 @@ func (r *BenchmarkReconciler) runControlOp(bm *cnsbench.Benchmark, a cnsbench.Co
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *BenchmarkReconciler) SetupWithManager(mgr ctrl.Manager) error {
-	r.state = make(map[string]*BenchmarkControllerState)
+	r.controlChannels = make(map[string](chan bool))
 	var err error
 	r.controller, err = ctrl.NewControllerManagedBy(mgr).
 		For(&cnsbench.Benchmark{}).
 		Build(r)
 	return err
-	//return ctrl.NewControllerManagedBy(mgr).
-	//	For(&cnsbench.Benchmark{}).
-	//	Complete(r)
 }

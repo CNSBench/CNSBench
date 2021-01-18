@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	cnsbench "github.com/cnsbench/cnsbench/api/v1alpha1"
-	"github.com/cnsbench/cnsbench/pkg/utils"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -26,6 +25,8 @@ func (r *BenchmarkReconciler) getParserContainerImage(parserName string) (string
 		return "", err
 	}
 
+	// The parser ConfigMap should indicate what container image to use to run the parser, but
+	// default to busybox if none is specified
 	if imageName, exists := parserCm.ObjectMeta.Annotations["container"]; !exists {
 		r.Log.Info("Container annotation does not exist for parser", "parser", parserName)
 		return "busybox", nil
@@ -34,7 +35,11 @@ func (r *BenchmarkReconciler) getParserContainerImage(parserName string) (string
 	}
 }
 
-func (r *BenchmarkReconciler) createTmpParser(bm *cnsbench.Benchmark, parserName string) (string, error) {
+/* The ConfigMaps that contain the parsers are in the library namespace, but the workload pods that
+ * will need access to the parsers are created in the default namespace.  Since pods can't attach to
+ * ConfigMaps in different namespaces, we create a copy of the parser ConfigMap in the default namespace
+ */
+func (r *BenchmarkReconciler) createParserClone(bm *cnsbench.Benchmark, parserName string) (string, error) {
 	parserCm := &corev1.ConfigMap{}
 
 	err := r.Client.Get(context.TODO(), client.ObjectKey{Name: parserName, Namespace: "library"}, parserCm)
@@ -54,7 +59,6 @@ func (r *BenchmarkReconciler) createTmpParser(bm *cnsbench.Benchmark, parserName
 		newCm.Data[k] = v
 	}
 
-	//if err := r.createObj(bm, runtime.Object(&newCm), true); err != nil {
 	if err := r.createObj(bm, client.Object(&newCm), true); err != nil {
 		r.Log.Error(err, "Creating temp ConfigMap")
 	}
@@ -62,15 +66,12 @@ func (r *BenchmarkReconciler) createTmpParser(bm *cnsbench.Benchmark, parserName
 	return newCm.ObjectMeta.Name, err
 }
 
-//func (r *BenchmarkReconciler) addParserContainer(bm *cnsbench.Benchmark, obj runtime.Object, parser string, outfile string, num int) (runtime.Object, error) {
 func (r *BenchmarkReconciler) addParserContainer(bm *cnsbench.Benchmark, obj client.Object, parser string, outfile string, num int) (client.Object, error) {
 	if parser == "" {
 		parser = "null-parser"
 	}
-	/* We need to do this because parser scripts are in the library namespace,
-	 * the workload is in the default namespace, and you can't attach configmaps
-	 * across namespaces.  So make a copy of the configmap in the default namespace */
-	if tmpCmName, err := r.createTmpParser(bm, parser); err != nil {
+
+	if tmpCmName, err := r.createParserClone(bm, parser); err != nil {
 		r.Log.Error(err, "Error adding parser container", parser)
 		return obj, err
 	} else {
@@ -80,7 +81,7 @@ func (r *BenchmarkReconciler) addParserContainer(bm *cnsbench.Benchmark, obj cli
 			return obj, err
 		}
 		r.Log.Info("Creating parser", "cmname", parser, "image", imageName)
-		obj, err = utils.AddParserContainer(obj, tmpCmName, outfile, imageName, num)
+		obj, err = r.AddParserContainer(bm, obj, tmpCmName, outfile, imageName, num)
 		if err != nil {
 			r.Log.Error(err, "Error adding parser container", outfile)
 			return obj, err
@@ -103,7 +104,7 @@ func (r *BenchmarkReconciler) addOutputContainer(bm *cnsbench.Benchmark, obj cli
 		}
 	}
 
-	obj, err := utils.AddOutputContainer(obj, outputArgs, outputContainer, outputFile)
+	obj, err := r.AddOutputContainer(bm, obj, outputArgs, outputContainer, outputFile)
 	if err != nil {
 		r.Log.Error(err, "Error adding output container", outputFile)
 		return obj, err
@@ -237,12 +238,13 @@ func (r *BenchmarkReconciler) addLabels(workloadSpec cnsbench.Workload, obj clie
 		}
 		if utils.Contains(multipleInstanceObjs, k) {
 			labels["multiinstance"] = "true"
-		}*/
+		}
+	*/
 
 	r.Log.Info("labels", "labels", labels)
 
 	accessor.SetLabels(obj, labels)
-	obj, err = utils.AddLabelsGeneric(obj, labels)
+	obj, err = r.AddLabelsGeneric(obj, labels)
 	if err != nil {
 		r.Log.Error(err, "Error updating workload labels")
 	}
@@ -250,8 +252,7 @@ func (r *BenchmarkReconciler) addLabels(workloadSpec cnsbench.Workload, obj clie
 	return obj, err
 }
 
-/* TODO: Break this function up */
-func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, k string, workloadName string, a cnsbench.Workload, cm *corev1.ConfigMap, objBytes []byte) (utils.NameKind, error) {
+func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, k string, workloadName string, a cnsbench.Workload, cm *corev1.ConfigMap, objBytes []byte) error {
 	var err error
 	var obj client.Object
 	var objAnnotations map[string]string
@@ -262,30 +263,30 @@ func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, k str
 	// Replace vars in workload spec with values from benchmark object
 	cmString := r.replaceVars(string(objBytes), a, w, count, workloadName, cm)
 	if obj, err = r.decodeConfigMap(cmString); err != nil {
-		return utils.NameKind{}, err
+		return err
 	}
 
 	if objAnnotations, err = accessor.Annotations(obj); err != nil {
 		r.Log.Error(err, "Error getting object annotations")
-		return utils.NameKind{}, err
+		return err
 	}
 
 	// Add containers for parsing and outputting
 	obj = r.addContainers(bm, obj, objAnnotations, a)
 
 	// Set env variables in workload container
-	utils.SetEnvVar("INSTANCE_NUM", strconv.Itoa(w), obj)
-	utils.SetEnvVar("NUM_INSTANCES", strconv.Itoa(count), obj)
+	r.SetEnvVar("INSTANCE_NUM", strconv.Itoa(w), obj)
+	r.SetEnvVar("NUM_INSTANCES", strconv.Itoa(count), obj)
 
 	// Add workloadname and multiinstance labels to object
 	if obj, err = r.addLabels(a, obj); err != nil {
-		return utils.NameKind{}, err
+		return err
 	}
 
 	// Add sync container if sync start requested
 	if _, exists := objAnnotations["sync"]; exists {
-		if obj, err = utils.AddSyncContainer(obj, a.Count, workloadName, a.SyncGroup); err != nil {
-			return utils.NameKind{}, err
+		if obj, err = r.AddSyncContainer(bm, obj, a.Count, workloadName, a.SyncGroup); err != nil {
+			return err
 		}
 	}
 
@@ -297,19 +298,15 @@ func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, k str
 
 	// Make the actual object
 	name, _ := accessor.Name(obj)
-	kind, _ := accessor.Kind(obj)
+	//kind, _ := accessor.Kind(obj)
 	if err := r.createObj(bm, obj, makeOwner); err != nil {
 		if !errors.IsAlreadyExists(err) {
-			return utils.NameKind{}, err
+			return err
 		} else {
 			r.Log.Info("Already exists", "name", name)
-			return utils.NameKind{}, nil
+			return nil
 		}
 	}
 
-	if getRole(objAnnotations) == "workload" {
-		return utils.NameKind{Name: name, Kind: kind}, nil
-	}
-
-	return utils.NameKind{}, nil
+	return nil
 }

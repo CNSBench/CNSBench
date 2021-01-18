@@ -8,9 +8,7 @@ import (
 	"strings"
 
 	cnsbench "github.com/cnsbench/cnsbench/api/v1alpha1"
-	"github.com/cnsbench/cnsbench/pkg/utils"
 
-	//appsv1 "k8s.io/api/apps/v1"
 	snapshotv1beta1 "github.com/kubernetes-csi/external-snapshotter/v2/pkg/apis/volumesnapshot/v1beta1"
 	snapshotscheme "github.com/kubernetes-csi/external-snapshotter/v2/pkg/client/clientset/versioned/scheme"
 	corev1 "k8s.io/api/core/v1"
@@ -110,48 +108,41 @@ func (r *BenchmarkReconciler) CreateVolume(bm *cnsbench.Benchmark, vol cnsbench.
 	}
 }
 
-func (r *BenchmarkReconciler) RunInstance(bm *cnsbench.Benchmark, cm *corev1.ConfigMap, multipleInstanceObjs []string, instanceNum int, workload cnsbench.Workload) ([]utils.NameKind, error) {
-	ret := []utils.NameKind{}
-	for k := range cm.Data {
-		r.Log.Info("uh")
-		if !utils.Contains(multipleInstanceObjs, k) {
-			r.Log.Info("Continuing")
+func (r *BenchmarkReconciler) RunInstance(bm *cnsbench.Benchmark, cm *corev1.ConfigMap, instanceNum int, workload cnsbench.Workload) error {
+	/*
+		for k := range cm.Data {
+			// check if duplicate=true label set on object, if so run it
 			continue
-		}
-		nk, err := r.prepareAndRun(bm, instanceNum, k, workload.Name, workload, cm, []byte(cm.Data[k]))
-		if err != nil {
-			return ret, err
-		}
-		if nk != (utils.NameKind{}) {
-			ret = append(ret, nk)
-		}
-	}
 
-	return ret, nil
+				if !utils.Contains(multipleInstanceObjs, k) {
+					r.Log.Info("Continuing")
+					continue
+				}
+			//if err := r.prepareAndRun(bm, instanceNum, k, workload.Name, workload, cm, []byte(cm.Data[k])); err != nil {
+			//	return err
+			//}
+		}*/
+
+	return nil
 }
 
-func (r *BenchmarkReconciler) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Workload, workloadName string) ([]utils.NameKind, error) {
+func (r *BenchmarkReconciler) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Workload, workloadName string) error {
 	cm := &corev1.ConfigMap{}
 
 	err := r.Client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: "library"}, cm)
 	if err != nil {
 		r.Log.Error(err, "Error getting ConfigMap", "spec", a.Workload)
-		return []utils.NameKind{}, err
+		return err
 	}
 
-	ret := []utils.NameKind{}
 	// hack to make sure parsers are created first, they need to exist before any workload that
 	// uses them is created
 	for k := range cm.Data {
 		if !strings.Contains(k, "parse") {
 			continue
 		}
-		nk, err := r.prepareAndRun(bm, 0, k, workloadName, a, cm, []byte(cm.Data[k]))
-		if err != nil {
-			return ret, err
-		}
-		if nk != (utils.NameKind{}) {
-			ret = append(ret, nk)
+		if err := r.prepareAndRun(bm, 0, k, workloadName, a, cm, []byte(cm.Data[k])); err != nil {
+			return err
 		}
 	}
 	for k := range cm.Data {
@@ -167,16 +158,12 @@ func (r *BenchmarkReconciler) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Wor
 		}
 
 		for w := 0; w < count; w++ {
-			nk, err := r.prepareAndRun(bm, w, k, workloadName, a, cm, []byte(cm.Data[k]))
-			if err != nil {
-				return ret, err
-			}
-			if nk != (utils.NameKind{}) {
-				ret = append(ret, nk)
+			if err := r.prepareAndRun(bm, w, k, workloadName, a, cm, []byte(cm.Data[k])); err != nil {
+				return err
 			}
 		}
 	}
-	return ret, nil
+	return nil
 }
 
 func (r *BenchmarkReconciler) CreateSnapshot(bm *cnsbench.Benchmark, s cnsbench.Snapshot, actionName string) error {
@@ -307,41 +294,29 @@ func (r *BenchmarkReconciler) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale)
 	return err
 }
 
-func (r *BenchmarkReconciler) ReconcileInstances(bm *cnsbench.Benchmark, c client.Client, workloads []cnsbench.Workload) ([]utils.NameKind, error) {
+func (r *BenchmarkReconciler) ReconcileInstances(bm *cnsbench.Benchmark, c client.Client, workloads []cnsbench.Workload) error {
 	cm := &corev1.ConfigMap{}
 
-	ret := []utils.NameKind{}
 	for _, a := range workloads {
-		// XXX This should never happen now
-		if a.Workload == "" {
-			continue
-		}
 		fmt.Println(a)
 
-		err := r.Client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: "library"}, cm)
-		if err != nil {
-			return ret, err
+		if err := r.Client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: "library"}, cm); err != nil {
+			return err
 		}
 
-		var multipleInstanceObjs []string
-		if mis, found := cm.ObjectMeta.Annotations["multipleInstances"]; found {
-			multipleInstanceObjs = strings.Split(mis, ",")
-		}
-
-		// Get all pods that match workloadname=true and multiinstance=true, if the number found is
-		// less than a.Count, add another set of instances (i.e., instantiate all of the objects
-		// in the workload spec listed in the workload's multipleInstances annotation)
+		// Iterate through each object in the workload spec, if it has "duplicate=true" annotation
+		// then check how many instances are running
 		ls := &metav1.LabelSelector{}
 		ls = metav1.AddLabelToSelector(ls, "workloadname", a.Name)
-		ls = metav1.AddLabelToSelector(ls, "multiinstance", "true")
+		ls = metav1.AddLabelToSelector(ls, "duplicate", "true")
 
 		selector, err := metav1.LabelSelectorAsSelector(ls)
 		if err != nil {
-			return ret, err
+			return err
 		}
 		pods := &corev1.PodList{}
 		if err := c.List(context.TODO(), pods, &client.ListOptions{Namespace: "default", LabelSelector: selector}); err != nil {
-			return ret, err
+			return err
 		}
 
 		incomplete := 0
@@ -355,16 +330,12 @@ func (r *BenchmarkReconciler) ReconcileInstances(bm *cnsbench.Benchmark, c clien
 		if incomplete < a.Count {
 			fmt.Println("Need new instances", a.Count, incomplete)
 			for n := 0; n < a.Count-incomplete; n++ {
-				if nks, err := r.RunInstance(bm, cm, multipleInstanceObjs, len(pods.Items)+1+n, a); err != nil {
-					return ret, err
-				} else {
-					for _, nk := range nks {
-						ret = append(ret, nk)
-					}
+				if err := r.RunInstance(bm, cm, len(pods.Items)+1+n, a); err != nil {
+					return err
 				}
 			}
 		}
 	}
 
-	return ret, nil
+	return nil
 }
