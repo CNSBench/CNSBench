@@ -166,6 +166,7 @@ func (in *BenchmarkStatus) DeepCopyInto(out *BenchmarkStatus) {
 	*out = *in
 	in.CompletionTime.DeepCopyInto(&out.CompletionTime)
 	in.InitCompletionTime.DeepCopyInto(&out.InitCompletionTime)
+	in.TargetCompletionTime.DeepCopyInto(&out.TargetCompletionTime)
 	if in.Conditions != nil {
 		in, out := &in.Conditions, &out.Conditions
 		*out = make([]BenchmarkCondition, len(*in))

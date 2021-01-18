@@ -464,6 +464,13 @@ spec:
                 type: integer
               state:
                 type: string
+              targetCompletionTime:
+                format: date-time
+                type: string
+              targetCompletionTimeUnix:
+                format: int64
+                nullable: true
+                type: integer
             required:
             - completionTimeUnix
             - conditions
@@ -473,6 +480,7 @@ spec:
             - runningWorkloads
             - startTimeUnix
             - state
+            - targetCompletionTime
             type: object
         type: object
     served: true
