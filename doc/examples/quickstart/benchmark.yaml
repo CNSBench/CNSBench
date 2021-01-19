@@ -16,4 +16,4 @@ spec:
   outputs:
     - name: es
       httpPostSpec:
-        url: output-collector.default.svc.cluster.local:9999/ex1
+        url: http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/ex1
