@@ -247,8 +247,10 @@ type BenchmarkStatus struct {
 
 	// +optional
 	// +nullable
-	TargetCompletionTimeUnix int64       `json:"targetCompletionTimeUnix"`
-	TargetCompletionTime     metav1.Time `json:"targetCompletionTime"`
+	TargetCompletionTimeUnix int64 `json:"targetCompletionTimeUnix"`
+	// +optional
+	// +nullable
+	TargetCompletionTime metav1.Time `json:"targetCompletionTime"`
 
 	CompletionTimeUnix     int64 `json:"completionTimeUnix"`
 	StartTimeUnix          int64 `json:"startTimeUnix"`
