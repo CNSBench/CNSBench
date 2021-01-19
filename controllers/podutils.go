@@ -254,7 +254,7 @@ func (r *BenchmarkReconciler) AddSyncContainer(bm *cnsbench.Benchmark, obj clien
 	return updatePodSpec(obj, *spec)
 }
 
-func (r *BenchmarkReconciler) AddOutputContainer(bm *cnsbench.Benchmark, obj client.Object, outputArgs, outputContainer, outputFilename string) (client.Object, error) {
+func (r *BenchmarkReconciler) AddOutputContainer(bm *cnsbench.Benchmark, obj client.Object, outputArgs, outputScript, outputFilename string) (client.Object, error) {
 	spec, err := podSpec(obj)
 	if spec == nil || err != nil {
 		return nil, err
@@ -264,7 +264,8 @@ func (r *BenchmarkReconciler) AddOutputContainer(bm *cnsbench.Benchmark, obj cli
 	c.Name = "output-container"
 	c.Image = "cnsbench/utility:latest"
 	// See comment for parser container
-	c.Command = []string{"sh", "-c", "/scripts/countdone.sh 2 && /scripts/output.sh " + outputFilename + ".parsed " + outputArgs}
+	//c.Command = []string{"sh", "-c", "/scripts/countdone.sh 2 && /scripts/output.sh " + outputFilename + ".parsed " + outputArgs}
+	c.Command = []string{"sh", "-c", "/scripts/countdone.sh 2 && /scripts/" + outputScript + " " + outputFilename + ".parsed " + outputArgs}
 	//c.Command = []string{"sh", "-c", "tail -f /dev/null"}
 	c.VolumeMounts = []corev1.VolumeMount{
 		{
@@ -273,8 +274,8 @@ func (r *BenchmarkReconciler) AddOutputContainer(bm *cnsbench.Benchmark, obj cli
 			Name:      "helper",
 		},
 		{
-			MountPath: "/scripts/output.sh",
-			SubPath:   "output.sh",
+			MountPath: "/scripts/" + outputScript,
+			SubPath:   outputScript,
 			Name:      "output",
 		},
 	}
@@ -291,7 +292,11 @@ func (r *BenchmarkReconciler) AddOutputContainer(bm *cnsbench.Benchmark, obj cli
 	spec.Containers = append(spec.Containers, c)
 
 	if !volInSpec(spec.Volumes, "output") {
-		spec.Volumes = append(spec.Volumes, newCMVol("output", outputContainer))
+		if cmName, err := r.createTmpConfigMap(bm, outputScript); err != nil {
+			return obj, err
+		} else {
+			spec.Volumes = append(spec.Volumes, newCMVol("output", cmName))
+		}
 	}
 
 	// This should have already been done by AddParserContainer, but just in case...

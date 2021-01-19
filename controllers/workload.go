@@ -93,18 +93,18 @@ func (r *BenchmarkReconciler) addParserContainer(bm *cnsbench.Benchmark, obj cli
 
 func (r *BenchmarkReconciler) addOutputContainer(bm *cnsbench.Benchmark, obj client.Object, outputName string, outputFile string) (client.Object, error) {
 	outputArgs := ""
-	outputContainer := "null-output"
+	outputScript := "null-output.sh"
 	for _, output := range bm.Spec.Outputs {
 		if output.Name == outputName {
 			r.Log.Info("Matched an output", "output", output)
 			if output.HttpPostSpec.URL != "" {
-				outputContainer = "http-output"
+				outputScript = "http-output.sh"
 				outputArgs = output.HttpPostSpec.URL
 			}
 		}
 	}
 
-	obj, err := r.AddOutputContainer(bm, obj, outputArgs, outputContainer, outputFile)
+	obj, err := r.AddOutputContainer(bm, obj, outputArgs, outputScript, outputFile)
 	if err != nil {
 		r.Log.Error(err, "Error adding output container", outputFile)
 		return obj, err
