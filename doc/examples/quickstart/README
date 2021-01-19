@@ -1,5 +1,3 @@
-Apply server.yaml to start a simple output collection server.
-
 1. Create a LocalDevice storage class (`kubectl apply -f local-sc.yaml`)
 2. Choose a node that will host the local volume, create a directory on that
    node which will be used to store the data on the volume.
