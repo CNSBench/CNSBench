@@ -192,7 +192,7 @@ spec:
                             type: string
                           type: array
                         dataSource:
-                          description: 'This field can be used to specify either: * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot - Beta) * An existing PVC (PersistentVolumeClaim) * An existing custom resource/object that implements data population (Alpha) In order to use VolumeSnapshot object types, the appropriate feature gate must be enabled (VolumeSnapshotDataSource or AnyVolumeDataSource) If the provisioner or an external controller can support the specified data source, it will create a new volume based on the contents of the specified data source. If the specified data source is not supported, the volume will not be created and the failure will be reported as an event. In the future, we plan to support more data source types and the behavior of the provisioner may change.'
+                          description: 'This field can be used to specify either: * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot) * An existing PVC (PersistentVolumeClaim) * An existing custom resource that implements data population (Alpha) In order to use custom resource types that implement data population, the AnyVolumeDataSource feature gate must be enabled. If the provisioner or an external controller can support the specified data source, it will create a new volume based on the contents of the specified data source.'
                           properties:
                             apiGroup:
                               description: APIGroup is the group for the resource being referenced. If APIGroup is not specified, the specified Kind must be in the core API group. For any other third-party types, APIGroup is required.
@@ -381,6 +381,13 @@ spec:
                 type: integer
               state:
                 type: string
+              targetCompletionTime:
+                format: date-time
+                type: string
+              targetCompletionTimeUnix:
+                format: int64
+                nullable: true
+                type: integer
             required:
             - completionTimeUnix
             - conditions
@@ -390,6 +397,7 @@ spec:
             - runningWorkloads
             - startTimeUnix
             - state
+            - targetCompletionTime
             type: object
         type: object
     served: true
@@ -604,7 +612,7 @@ spec:
                             type: string
                           type: array
                         dataSource:
-                          description: 'This field can be used to specify either: * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot - Beta) * An existing PVC (PersistentVolumeClaim) * An existing custom resource/object that implements data population (Alpha) In order to use VolumeSnapshot object types, the appropriate feature gate must be enabled (VolumeSnapshotDataSource or AnyVolumeDataSource) If the provisioner or an external controller can support the specified data source, it will create a new volume based on the contents of the specified data source. If the specified data source is not supported, the volume will not be created and the failure will be reported as an event. In the future, we plan to support more data source types and the behavior of the provisioner may change.'
+                          description: 'This field can be used to specify either: * An existing VolumeSnapshot object (snapshot.storage.k8s.io/VolumeSnapshot) * An existing PVC (PersistentVolumeClaim) * An existing custom resource that implements data population (Alpha) In order to use custom resource types that implement data population, the AnyVolumeDataSource feature gate must be enabled. If the provisioner or an external controller can support the specified data source, it will create a new volume based on the contents of the specified data source.'
                           properties:
                             apiGroup:
                               description: APIGroup is the group for the resource being referenced. If APIGroup is not specified, the specified Kind must be in the core API group. For any other third-party types, APIGroup is required.
@@ -793,6 +801,13 @@ spec:
                 type: integer
               state:
                 type: string
+              targetCompletionTime:
+                format: date-time
+                type: string
+              targetCompletionTimeUnix:
+                format: int64
+                nullable: true
+                type: integer
             required:
             - completionTimeUnix
             - conditions
@@ -802,6 +817,7 @@ spec:
             - runningWorkloads
             - startTimeUnix
             - state
+            - targetCompletionTime
             type: object
         type: object
     served: true
@@ -1078,6 +1094,18 @@ spec:
   selector:
     control-plane: controller-manager
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cnsbench-output-collector
+  namespace: cnsbench-system
+spec:
+  ports:
+  - port: 8888
+    protocol: TCP
+  selector:
+    app: output-collector
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -1138,3 +1166,28 @@ spec:
       securityContext:
         runAsUser: 65532
       terminationGracePeriodSeconds: 10
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: output-collector
+  name: cnsbench-output-collector
+  namespace: cnsbench-system
+spec:
+  containers:
+  - command:
+    - /output-collector
+    image: cnsbench/output-collector
+    name: output-collector
+    ports:
+    - containerPort: 8888
+    resources:
+      limits:
+        cpu: 100m
+        memory: 30Mi
+      requests:
+        cpu: 100m
+        memory: 20Mi
+    securityContext:
+      runAsUser: 65532

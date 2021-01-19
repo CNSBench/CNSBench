@@ -23,13 +23,19 @@ func Output(outputName string, bm *cnsbench.Benchmark, startTime, completionTime
 	}
 	reader := bytes.NewReader(buf.Bytes())
 
-	for _, out := range bm.Spec.Outputs {
-		fmt.Println(out)
-		fmt.Println(outputName)
-		if out.Name == outputName {
-			if out.HttpPostSpec.URL != "" {
-				if err := HttpPost(reader, out.HttpPostSpec.URL); err != nil {
-					return err
+	if outputName == "" {
+		if err := HttpPost(reader, "http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/metadata/"+bm.ObjectMeta.Name); err != nil {
+			return err
+		}
+	} else {
+		for _, out := range bm.Spec.Outputs {
+			fmt.Println(out)
+			fmt.Println(outputName)
+			if out.Name == outputName {
+				if out.HttpPostSpec.URL != "" {
+					if err := HttpPost(reader, out.HttpPostSpec.URL); err != nil {
+						return err
+					}
 				}
 			}
 		}

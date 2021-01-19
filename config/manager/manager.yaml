@@ -53,3 +53,42 @@ spec:
             cpu: 100m
             memory: 20Mi
       terminationGracePeriodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: output-collector
+  namespace: system
+spec:
+  selector:
+    app: output-collector
+  ports:
+  - port: 8888
+    protocol: TCP
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: output-collector
+  namespace: system
+  labels:
+    app: output-collector
+spec:
+  containers:
+  - name: output-collector
+    image: cnsbench/output-collector
+    command:
+    - /output-collector
+    ports:
+    - containerPort: 8888
+    resources:
+      limits:
+        cpu: 100m
+        memory: 30Mi
+      requests:
+        cpu: 100m
+        memory: 20Mi
+    securityContext:
+      allowPrivlegeEscalation: false
+    securityContext:
+      runAsUser: 65532

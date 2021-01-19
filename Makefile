@@ -13,6 +13,7 @@ BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 # Image URL to use all building/pushing image targets
 IMG ?= cnsbench/controller:latest
+OUTPUT_COLLECTOR_IMG ?= cnsbench/output-collector:latest
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true,preserveUnknownFields=false"
 
@@ -38,7 +39,7 @@ manager: generate fmt vet
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
-	go run ./main.go
+	go run ./main.go --scripts-dir ./scripts
 
 # Install CRDs into a cluster
 install: manifests kustomize
@@ -82,10 +83,12 @@ generate: controller-gen
 # Build the docker image
 docker-build: test
 	sudo docker build -t ${IMG} .
+	sudo docker build -t ${OUTPUT_COLLECTOR_IMG} output-collector
 
 # Push the docker image
 docker-push:
 	sudo docker push ${IMG}
+	sudo docker push ${OUTPUT_COLLECTOR_IMG}
 
 # Download controller-gen locally if necessary
 CONTROLLER_GEN = $(shell pwd)/bin/controller-gen

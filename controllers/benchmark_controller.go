@@ -38,11 +38,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
-type BenchmarkControllerState struct {
-	// Send "true" to these when it's time to exit
-	ControlChannel chan bool
-}
-
 // BenchmarkReconciler reconciles a Benchmark object
 type BenchmarkReconciler struct {
 	client.Client
@@ -50,6 +45,7 @@ type BenchmarkReconciler struct {
 	Scheme          *runtime.Scheme
 	controlChannels map[string](chan bool)
 	controller      controller.Controller
+	ScriptsDir      string
 }
 
 // +kubebuilder:rbac:groups=cnsbench.example.com,resources=benchmarks,verbs=get;list;watch;create;update;patch;delete
@@ -125,10 +121,8 @@ func (r *BenchmarkReconciler) startRates(instance *cnsbench.Benchmark) error {
 func (r *BenchmarkReconciler) doOutputs(bm *cnsbench.Benchmark, startTime, completionTime, initCompletionTime int64) {
 	r.Log.Info("Do outputs")
 
-	if bm.Spec.MetadataOutput != "" {
-		if err := output.Output(bm.Spec.MetadataOutput, bm, startTime, completionTime, initCompletionTime); err != nil {
-			r.Log.Error(err, "Error sending outputs")
-		}
+	if err := output.Output(bm.Spec.MetadataOutput, bm, startTime, completionTime, initCompletionTime); err != nil {
+		r.Log.Error(err, "Error sending outputs")
 	}
 }
 
