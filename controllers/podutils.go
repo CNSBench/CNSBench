@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/storage/names"
 	utilptr "k8s.io/utils/pointer"
+	"path"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"strconv"
 )
@@ -126,8 +127,8 @@ func addOutputVol(spec *corev1.PodSpec) {
 /* TODO: Figure out how to cache this so we don't read these files each time they're
  * added to a pod
  */
-func loadScript(scriptName string) (string, error) {
-	if b, err := ioutil.ReadFile("/scripts/" + scriptName); err != nil {
+func (r *BenchmarkReconciler) loadScript(scriptName string) (string, error) {
+	if b, err := ioutil.ReadFile(path.Join(r.ScriptsDir, scriptName)); err != nil {
 		return "", err
 	} else {
 		return string(b), nil
@@ -141,7 +142,7 @@ func loadScript(scriptName string) (string, error) {
  * completes.
  */
 func (r *BenchmarkReconciler) createTmpConfigMap(bm *cnsbench.Benchmark, scriptName string) (string, error) {
-	script, err := loadScript(scriptName)
+	script, err := r.loadScript(scriptName)
 	if err != nil {
 		r.Log.Error(err, "Error creating tmp configmap for "+scriptName)
 		return "", err
