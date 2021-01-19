@@ -41,7 +41,7 @@ func CheckCompletion(c client.Client, workloadName string) (bool, error) {
 	var selector labels.Selector
 	ls := &metav1.LabelSelector{}
 	ls = metav1.AddLabelToSelector(ls, "workloadname", workloadName)
-	ls = metav1.AddLabelToSelector(ls, "duplicate", "true")
+	ls = metav1.AddLabelToSelector(ls, "role", "workload")
 	if selector, err = metav1.LabelSelectorAsSelector(ls); err != nil {
 		return false, err
 	}

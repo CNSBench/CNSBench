@@ -215,7 +215,7 @@ func getCount(count int) int {
 	return count
 }
 
-func (r *BenchmarkReconciler) addLabels(workloadSpec cnsbench.Workload, obj client.Object) (client.Object, error) {
+func (r *BenchmarkReconciler) addLabels(workloadSpec cnsbench.Workload, obj client.Object, annotations map[string]string) (client.Object, error) {
 	// Add workloadname and multiinstance labels to object
 	accessor := meta.NewAccessor()
 	labels, err := accessor.Labels(obj)
@@ -230,6 +230,7 @@ func (r *BenchmarkReconciler) addLabels(workloadSpec cnsbench.Workload, obj clie
 		labels["syncgroup"] = workloadSpec.SyncGroup
 	}
 	labels["workloadname"] = workloadSpec.Name //workloadName
+	labels["role"] = getRole(annotations)
 
 	/*
 		var multipleInstanceObjs []string
@@ -279,7 +280,7 @@ func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, k str
 	r.SetEnvVar("NUM_INSTANCES", strconv.Itoa(count), obj)
 
 	// Add workloadname and multiinstance labels to object
-	if obj, err = r.addLabels(a, obj); err != nil {
+	if obj, err = r.addLabels(a, obj, objAnnotations); err != nil {
 		return err
 	}
 
