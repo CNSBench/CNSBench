@@ -1,0 +1,3 @@
+[submodule "workload-library"]
+	path = workload-library
+	url = git@github.com:CNSBench/workload-library.git
