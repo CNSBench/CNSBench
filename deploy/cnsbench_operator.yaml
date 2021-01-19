@@ -383,6 +383,7 @@ spec:
                 type: string
               targetCompletionTime:
                 format: date-time
+                nullable: true
                 type: string
               targetCompletionTimeUnix:
                 format: int64
@@ -397,7 +398,6 @@ spec:
             - runningWorkloads
             - startTimeUnix
             - state
-            - targetCompletionTime
             type: object
         type: object
     served: true
@@ -803,6 +803,7 @@ spec:
                 type: string
               targetCompletionTime:
                 format: date-time
+                nullable: true
                 type: string
               targetCompletionTimeUnix:
                 format: int64
@@ -817,7 +818,6 @@ spec:
             - runningWorkloads
             - startTimeUnix
             - state
-            - targetCompletionTime
             type: object
         type: object
     served: true
