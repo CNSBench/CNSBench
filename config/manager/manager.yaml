@@ -92,3 +92,26 @@ spec:
       allowPrivlegeEscalation: false
     securityContext:
       runAsUser: 65532
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  namespace: default
+  name: cnsbench-pod-watcher
+rules:
+- apiGroups: [""] # "" indicates the core API group
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: cnsbench-binding
+subjects:
+  - kind: ServiceAccount
+    name: default
+    namespace: default
+roleRef:
+  kind: ClusterRole
+  name: cnsbench-pod-watcher
+  apiGroup: rbac.authorization.k8s.io
