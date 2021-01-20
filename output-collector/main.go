@@ -13,6 +13,7 @@ type Output struct {
 	Timestamp  int64  `json:"timestamp"`
 	RemoteAddr string `json:"remoteAddr"`
 	Endpoint   string `json:"endpoint"`
+	Params	   map[string][]string `json:"params"`
 	Data       string `json:"data"`
 }
 
@@ -26,7 +27,7 @@ func handler(w http.ResponseWriter, req *http.Request) {
 		data = buf.String()
 	}
 
-	output := &Output{time.Now().Unix(), req.RemoteAddr, req.URL.Hostname(), data}
+	output := &Output{time.Now().Unix(), req.RemoteAddr, req.URL.Path, req.URL.Query(), data}
 
 	if j, err := json.Marshal(output); err != nil {
 		fmt.Println(err)
