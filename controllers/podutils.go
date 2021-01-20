@@ -167,6 +167,7 @@ func (r *BenchmarkReconciler) createTmpConfigMap(bm *cnsbench.Benchmark, scriptN
 func (r *BenchmarkReconciler) AddParserContainer(bm *cnsbench.Benchmark, obj client.Object, parserCMName, logFilename, imageName string, num int) (client.Object, error) {
 	spec, err := podSpec(obj)
 	if spec == nil || err != nil {
+		r.Log.Error(err, "podSpec")
 		return nil, err
 	}
 
@@ -188,6 +189,10 @@ func (r *BenchmarkReconciler) AddParserContainer(bm *cnsbench.Benchmark, obj cli
 		{
 			MountPath: "/scripts/parser",
 			Name:      "parser",
+		},
+		{
+			MountPath: "/var/run/secrets/kubernetes.io/podwatcher",
+			Name:      "pod-watcher-token",
 		},
 	}
 	c.Env = []corev1.EnvVar{
@@ -217,6 +222,10 @@ func (r *BenchmarkReconciler) AddParserContainer(bm *cnsbench.Benchmark, obj cli
 		}
 	}
 
+	if !volInSpec(spec.Volumes, "pod-watcher-token") {
+		spec.Volumes = append(spec.Volumes, getPodWatcherVol())
+	}
+
 	addOutputVol(spec)
 
 	return updatePodSpec(obj, *spec)
@@ -225,6 +234,7 @@ func (r *BenchmarkReconciler) AddParserContainer(bm *cnsbench.Benchmark, obj cli
 func (r *BenchmarkReconciler) AddSyncContainer(bm *cnsbench.Benchmark, obj client.Object, count int, workloadName string, syncGroup string) (client.Object, error) {
 	spec, err := podSpec(obj)
 	if spec == nil || err != nil {
+		r.Log.Error(err, "podSpec")
 		return nil, err
 	}
 
@@ -254,9 +264,20 @@ func (r *BenchmarkReconciler) AddSyncContainer(bm *cnsbench.Benchmark, obj clien
 	return updatePodSpec(obj, *spec)
 }
 
+func getPodWatcherVol() corev1.Volume {
+	vol := corev1.Volume{}
+	vol.Name = "pod-watcher-token"
+	vol.Secret = &corev1.SecretVolumeSource{
+		SecretName: "pod-watcher-token",
+	}
+
+	return vol
+}
+
 func (r *BenchmarkReconciler) AddOutputContainer(bm *cnsbench.Benchmark, obj client.Object, outputArgs, outputScript, outputFilename string) (client.Object, error) {
 	spec, err := podSpec(obj)
 	if spec == nil || err != nil {
+		r.Log.Error(err, "podSpec")
 		return nil, err
 	}
 
@@ -277,6 +298,10 @@ func (r *BenchmarkReconciler) AddOutputContainer(bm *cnsbench.Benchmark, obj cli
 			MountPath: "/scripts/" + outputScript,
 			SubPath:   outputScript,
 			Name:      "output",
+		},
+		{
+			MountPath: "/var/run/secrets/kubernetes.io/podwatcher",
+			Name:      "pod-watcher-token",
 		},
 	}
 	c.Env = []corev1.EnvVar{
@@ -306,6 +331,10 @@ func (r *BenchmarkReconciler) AddOutputContainer(bm *cnsbench.Benchmark, obj cli
 		} else {
 			spec.Volumes = append(spec.Volumes, newCMVol("helper", cmName))
 		}
+	}
+
+	if !volInSpec(spec.Volumes, "pod-watcher-token") {
+		spec.Volumes = append(spec.Volumes, getPodWatcherVol())
 	}
 
 	addOutputVol(spec)
