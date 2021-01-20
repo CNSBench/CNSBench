@@ -129,7 +129,7 @@ func (r *BenchmarkReconciler) RunInstance(bm *cnsbench.Benchmark, cm *corev1.Con
 func (r *BenchmarkReconciler) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Workload, workloadName string) error {
 	cm := &corev1.ConfigMap{}
 
-	err := r.Client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: "library"}, cm)
+	err := r.Client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: LIBRARY_NAMESPACE}, cm)
 	if err != nil {
 		r.Log.Error(err, "Error getting ConfigMap", "spec", a.Workload)
 		return err
@@ -300,7 +300,7 @@ func (r *BenchmarkReconciler) ReconcileInstances(bm *cnsbench.Benchmark, c clien
 	for _, a := range workloads {
 		fmt.Println(a)
 
-		if err := r.Client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: "library"}, cm); err != nil {
+		if err := r.Client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: LIBRARY_NAMESPACE}, cm); err != nil {
 			return err
 		}
 

@@ -19,7 +19,7 @@ import (
 func (r *BenchmarkReconciler) getParserContainerImage(parserName string) (string, error) {
 	parserCm := &corev1.ConfigMap{}
 
-	err := r.Client.Get(context.TODO(), client.ObjectKey{Name: parserName, Namespace: "library"}, parserCm)
+	err := r.Client.Get(context.TODO(), client.ObjectKey{Name: parserName, Namespace: LIBRARY_NAMESPACE}, parserCm)
 	if err != nil {
 		r.Log.Error(err, "Error getting ConfigMap", "spec", parserName)
 		return "", err
@@ -42,7 +42,7 @@ func (r *BenchmarkReconciler) getParserContainerImage(parserName string) (string
 func (r *BenchmarkReconciler) createParserClone(bm *cnsbench.Benchmark, parserName string) (string, error) {
 	parserCm := &corev1.ConfigMap{}
 
-	err := r.Client.Get(context.TODO(), client.ObjectKey{Name: parserName, Namespace: "library"}, parserCm)
+	err := r.Client.Get(context.TODO(), client.ObjectKey{Name: parserName, Namespace: LIBRARY_NAMESPACE}, parserCm)
 	if err != nil {
 		r.Log.Error(err, "Error getting ConfigMap", "spec", parserName)
 		return "", err

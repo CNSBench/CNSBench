@@ -38,6 +38,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 )
 
+const LIBRARY_NAMESPACE = "cnsbench-library"
+
 // BenchmarkReconciler reconciles a Benchmark object
 type BenchmarkReconciler struct {
 	client.Client
@@ -85,7 +87,6 @@ func (r *BenchmarkReconciler) startWorkloads(instance *cnsbench.Benchmark, workl
 	instance.Status.RunningWorkloads = 0
 	for _, a := range workloads {
 		if err := r.RunWorkload(instance, a, a.Name); err != nil {
-			r.Log.Error(err, "Running spec")
 			return err
 		}
 	}
