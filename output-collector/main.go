@@ -10,11 +10,11 @@ import (
 )
 
 type Output struct {
-	Timestamp  int64  `json:"timestamp"`
-	RemoteAddr string `json:"remoteAddr"`
-	Endpoint   string `json:"endpoint"`
-	Params	   map[string][]string `json:"params"`
-	Data       string `json:"data"`
+	Timestamp  int64               `json:"timestamp"`
+	RemoteAddr string              `json:"remoteAddr"`
+	Endpoint   string              `json:"endpoint"`
+	Params     map[string][]string `json:"params"`
+	Data       string              `json:"data"`
 }
 
 func handler(w http.ResponseWriter, req *http.Request) {
