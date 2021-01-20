@@ -2,7 +2,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: fio-test-workload
-  namespace: library
+  namespace: cnsbench-library
   labels:
     type: workload
   annotations:
@@ -18,7 +18,7 @@ data:
     kind: ConfigMap
     metadata:
       name: fio-elapsed-time-parser
-      namespace: library
+      namespace: cnsbench-library
       labels:
         type: parser
       annotations:
@@ -45,7 +45,7 @@ data:
     kind: ConfigMap
     metadata:
       name: fio-json-parser
-      namespace: library
+      namespace: cnsbench-library
       labels:
         type: parser
       annotations:

@@ -1192,6 +1192,14 @@ spec:
     securityContext:
       runAsUser: 65532
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pod-watcher
+  namespace: default
+secrets:
+- name: pod-watcher-token
+---
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -1202,15 +1210,29 @@ rules:
   resources: ["pods"]
   verbs: ["get", "watch", "list"]
 ---
-apiVersion: rbac.authorization.k8s.io/v1beta1
+apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: cnsbench-binding
 subjects:
   - kind: ServiceAccount
-    name: default
+    name: pod-watcher
     namespace: default
 roleRef:
   kind: ClusterRole
   name: cnsbench-pod-watcher
   apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: pod-watcher-token
+  namespace: default
+  annotations:
+    kubernetes.io/service-account.name: pod-watcher
+type: kubernetes.io/service-account-token
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cnsbench-library
