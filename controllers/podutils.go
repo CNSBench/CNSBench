@@ -17,7 +17,7 @@ import (
 	"strconv"
 )
 
-func CleanupScalePods(c client.Client) error {
+func (r *BenchmarkReconciler) CleanupScalePods(c client.Client) error {
 	ls := &metav1.LabelSelector{}
 	ls = metav1.AddLabelToSelector(ls, "app", "scale-pod")
 
@@ -41,7 +41,7 @@ func CleanupScalePods(c client.Client) error {
 	return nil
 }
 
-func podSpec(obj client.Object) (*corev1.PodSpec, error) {
+func (r *BenchmarkReconciler) podSpec(obj client.Object) (*corev1.PodSpec, error) {
 	kind, err := meta.NewAccessor().Kind(obj)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func podSpec(obj client.Object) (*corev1.PodSpec, error) {
 	return nil, nil
 }
 
-func updatePodSpec(obj client.Object, spec corev1.PodSpec) (client.Object, error) {
+func (r *BenchmarkReconciler) updatePodSpec(obj client.Object, spec corev1.PodSpec) (client.Object, error) {
 	kind, err := meta.NewAccessor().Kind(obj)
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func updatePodSpec(obj client.Object, spec corev1.PodSpec) (client.Object, error
 	return nil, nil
 }
 
-func volInSpec(vols []corev1.Volume, name string) bool {
+func (r *BenchmarkReconciler) volInSpec(vols []corev1.Volume, name string) bool {
 	for _, v := range vols {
 		if v.Name == name {
 			return true
@@ -89,7 +89,7 @@ func volInSpec(vols []corev1.Volume, name string) bool {
 	return false
 }
 
-func newCMVol(name, cmName string) corev1.Volume {
+func (r *BenchmarkReconciler) newCMVol(name, cmName string) corev1.Volume {
 	vol := corev1.Volume{}
 	vol.Name = name
 	cm := corev1.ConfigMapVolumeSource{}
@@ -99,8 +99,38 @@ func newCMVol(name, cmName string) corev1.Volume {
 	return vol
 }
 
-func addOutputVol(spec *corev1.PodSpec) {
-	if !volInSpec(spec.Volumes, "output-vol") {
+func (r *BenchmarkReconciler) buildContainer(containerName, imageName, cmdline string) corev1.Container {
+	c := corev1.Container{}
+	c.Name = containerName
+	c.Image = imageName
+	c.Command = []string{"sh", "-c", cmdline}
+	c.VolumeMounts = []corev1.VolumeMount{
+		{
+			MountPath: "/scripts/countdone.sh",
+			SubPath:   "countdone.sh",
+			Name:      "helper",
+		},
+		{
+			MountPath: "/var/run/secrets/kubernetes.io/podwatcher",
+			Name:      "pod-watcher-token",
+		},
+	}
+	c.Env = []corev1.EnvVar{
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+	}
+
+	return c
+}
+
+func (r *BenchmarkReconciler) addOutputVol(spec *corev1.PodSpec) {
+	if !r.volInSpec(spec.Volumes, "output-vol") {
 		outputVol := corev1.Volume{}
 		outputVol.Name = "output-vol"
 		outputVol.EmptyDir = &corev1.EmptyDirVolumeSource{}
@@ -165,74 +195,44 @@ func (r *BenchmarkReconciler) createTmpConfigMap(bm *cnsbench.Benchmark, scriptN
 }
 
 func (r *BenchmarkReconciler) AddParserContainer(bm *cnsbench.Benchmark, obj client.Object, parserCMName, logFilename, imageName string, num int) (client.Object, error) {
-	spec, err := podSpec(obj)
+	spec, err := r.podSpec(obj)
 	if spec == nil || err != nil {
 		r.Log.Error(err, "podSpec")
 		return nil, err
 	}
 
-	c := corev1.Container{}
-	c.Name = "parser-container"
-	c.Image = imageName
-	// The countdone script counts how many non-init containers have finished in the
-	// parser container's pod.  The first argument indicates how many need to finish
-	// before moving on and running the parser.  This assumes that the workload pod
-	// will consist of a single container that runs to completion.
-	c.Command = []string{"sh", "-c", "/scripts/countdone.sh 1 && /scripts/parser/* " + logFilename + " > " + logFilename + ".parsed"}
-	//c.Command = []string{"sh", "-c", "tail -f /dev/null"}
-	c.VolumeMounts = []corev1.VolumeMount{
-		{
-			MountPath: "/scripts/countdone.sh",
-			SubPath:   "countdone.sh",
-			Name:      "helper",
-		},
-		{
-			MountPath: "/scripts/parser",
-			Name:      "parser",
-		},
-		{
-			MountPath: "/var/run/secrets/kubernetes.io/podwatcher",
-			Name:      "pod-watcher-token",
-		},
-	}
-	c.Env = []corev1.EnvVar{
-		{
-			Name: "POD_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
-				},
-			},
-		},
-	}
-	spec.Containers = append(spec.Containers, c)
+	cmdline := "/scripts/countdone.sh 1 && /scripts/parser/* " + logFilename + " > " + logFilename + ".parsed"
+	container := r.buildContainer("parser-container", imageName, cmdline)
+	parserMount := corev1.VolumeMount{MountPath: "/scripts/parser", Name: "parser"}
+	container.VolumeMounts = append(container.VolumeMounts, parserMount)
+	spec.Containers = append(spec.Containers, container)
 
-	if !volInSpec(spec.Volumes, "parser") {
+	if !r.volInSpec(spec.Volumes, "parser") {
 		// If we have more than one output file we could have multiple parsers
 		// For now, just assume we only have one file so we can just name the
 		// vol "parser"
-		spec.Volumes = append(spec.Volumes, newCMVol("parser", parserCMName))
+		spec.Volumes = append(spec.Volumes, r.newCMVol("parser", parserCMName))
 	}
 
-	if !volInSpec(spec.Volumes, "helper") {
+	if !r.volInSpec(spec.Volumes, "helper") {
 		if cmName, err := r.createTmpConfigMap(bm, "countdone.sh"); err != nil {
 			return obj, err
 		} else {
-			spec.Volumes = append(spec.Volumes, newCMVol("helper", cmName))
+			spec.Volumes = append(spec.Volumes, r.newCMVol("helper", cmName))
 		}
 	}
 
-	if !volInSpec(spec.Volumes, "pod-watcher-token") {
-		spec.Volumes = append(spec.Volumes, getPodWatcherVol())
+	if !r.volInSpec(spec.Volumes, "pod-watcher-token") {
+		spec.Volumes = append(spec.Volumes, r.getPodWatcherVol())
 	}
 
-	addOutputVol(spec)
+	r.addOutputVol(spec)
 
-	return updatePodSpec(obj, *spec)
+	return r.updatePodSpec(obj, *spec)
 }
 
 func (r *BenchmarkReconciler) AddSyncContainer(bm *cnsbench.Benchmark, obj client.Object, count int, workloadName string, syncGroup string) (client.Object, error) {
-	spec, err := podSpec(obj)
+	spec, err := r.podSpec(obj)
 	if spec == nil || err != nil {
 		r.Log.Error(err, "podSpec")
 		return nil, err
@@ -258,13 +258,13 @@ func (r *BenchmarkReconciler) AddSyncContainer(bm *cnsbench.Benchmark, obj clien
 	if cmName, err := r.createTmpConfigMap(bm, "ready.sh"); err != nil {
 		return obj, err
 	} else {
-		spec.Volumes = append(spec.Volumes, newCMVol("ready-script", cmName))
+		spec.Volumes = append(spec.Volumes, r.newCMVol("ready-script", cmName))
 	}
 
-	return updatePodSpec(obj, *spec)
+	return r.updatePodSpec(obj, *spec)
 }
 
-func getPodWatcherVol() corev1.Volume {
+func (r *BenchmarkReconciler) getPodWatcherVol() corev1.Volume {
 	vol := corev1.Volume{}
 	vol.Name = "pod-watcher-token"
 	vol.Secret = &corev1.SecretVolumeSource{
@@ -275,71 +275,41 @@ func getPodWatcherVol() corev1.Volume {
 }
 
 func (r *BenchmarkReconciler) AddOutputContainer(bm *cnsbench.Benchmark, obj client.Object, outputArgs, outputScript, outputFilename string) (client.Object, error) {
-	spec, err := podSpec(obj)
+	spec, err := r.podSpec(obj)
 	if spec == nil || err != nil {
 		r.Log.Error(err, "podSpec")
 		return nil, err
 	}
+	cmdline := "/scripts/countdone.sh 2 && /scripts/" + outputScript + " " + outputFilename + ".parsed " + outputArgs
+	container := r.buildContainer("output-container", "cnsbench/utility:latest", cmdline)
+	outputScriptMount := corev1.VolumeMount{MountPath: "/scripts/" + outputScript, Name: "output", SubPath: outputScript}
+	container.VolumeMounts = append(container.VolumeMounts, outputScriptMount)
+	spec.Containers = append(spec.Containers, container)
 
-	c := corev1.Container{}
-	c.Name = "output-container"
-	c.Image = "cnsbench/utility:latest"
-	// See comment for parser container
-	//c.Command = []string{"sh", "-c", "/scripts/countdone.sh 2 && /scripts/output.sh " + outputFilename + ".parsed " + outputArgs}
-	c.Command = []string{"sh", "-c", "/scripts/countdone.sh 2 && /scripts/" + outputScript + " " + outputFilename + ".parsed " + outputArgs}
-	//c.Command = []string{"sh", "-c", "tail -f /dev/null"}
-	c.VolumeMounts = []corev1.VolumeMount{
-		{
-			MountPath: "/scripts/countdone.sh",
-			SubPath:   "countdone.sh",
-			Name:      "helper",
-		},
-		{
-			MountPath: "/scripts/" + outputScript,
-			SubPath:   outputScript,
-			Name:      "output",
-		},
-		{
-			MountPath: "/var/run/secrets/kubernetes.io/podwatcher",
-			Name:      "pod-watcher-token",
-		},
-	}
-	c.Env = []corev1.EnvVar{
-		{
-			Name: "POD_NAME",
-			ValueFrom: &corev1.EnvVarSource{
-				FieldRef: &corev1.ObjectFieldSelector{
-					FieldPath: "metadata.name",
-				},
-			},
-		},
-	}
-	spec.Containers = append(spec.Containers, c)
-
-	if !volInSpec(spec.Volumes, "output") {
+	if !r.volInSpec(spec.Volumes, "output") {
 		if cmName, err := r.createTmpConfigMap(bm, outputScript); err != nil {
 			return obj, err
 		} else {
-			spec.Volumes = append(spec.Volumes, newCMVol("output", cmName))
+			spec.Volumes = append(spec.Volumes, r.newCMVol("output", cmName))
 		}
 	}
 
 	// This should have already been done by AddParserContainer, but just in case...
-	if !volInSpec(spec.Volumes, "helper") {
+	if !r.volInSpec(spec.Volumes, "helper") {
 		if cmName, err := r.createTmpConfigMap(bm, "countdone.sh"); err != nil {
 			return obj, err
 		} else {
-			spec.Volumes = append(spec.Volumes, newCMVol("helper", cmName))
+			spec.Volumes = append(spec.Volumes, r.newCMVol("helper", cmName))
 		}
 	}
 
-	if !volInSpec(spec.Volumes, "pod-watcher-token") {
-		spec.Volumes = append(spec.Volumes, getPodWatcherVol())
+	if !r.volInSpec(spec.Volumes, "pod-watcher-token") {
+		spec.Volumes = append(spec.Volumes, r.getPodWatcherVol())
 	}
 
-	addOutputVol(spec)
+	r.addOutputVol(spec)
 
-	return updatePodSpec(obj, *spec)
+	return r.updatePodSpec(obj, *spec)
 }
 
 func (r *BenchmarkReconciler) AddLabelsGeneric(obj client.Object, labels map[string]string) (client.Object, error) {
@@ -354,17 +324,17 @@ func (r *BenchmarkReconciler) AddLabelsGeneric(obj client.Object, labels map[str
 				labels[k] = v
 			}
 		}
-		addLabels(&pt.Spec.Template.ObjectMeta, labels)
+		r.addLabels(&pt.Spec.Template.ObjectMeta, labels)
 		return client.Object(&pt), nil
 	} else if kind == "StatefulSet" {
 		pt := *obj.(*appsv1.StatefulSet)
-		addLabels(&pt.Spec.Template.ObjectMeta, labels)
+		r.addLabels(&pt.Spec.Template.ObjectMeta, labels)
 		return client.Object(&pt), nil
 	}
 	return obj, nil
 }
 
-func addLabels(spec *metav1.ObjectMeta, labels map[string]string) {
+func (r *BenchmarkReconciler) addLabels(spec *metav1.ObjectMeta, labels map[string]string) {
 	spec.Labels = labels
 }
 

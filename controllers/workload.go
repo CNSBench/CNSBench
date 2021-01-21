@@ -155,7 +155,7 @@ func (r *BenchmarkReconciler) decodeConfigMap(cmString string) (client.Object, e
 	return obj, nil
 }
 
-func getRole(annotations map[string]string) string {
+func (r *BenchmarkReconciler) getRole(annotations map[string]string) string {
 	if _, exists := annotations["role"]; exists {
 		return annotations["role"]
 	}
@@ -165,7 +165,7 @@ func getRole(annotations map[string]string) string {
 
 func (r *BenchmarkReconciler) addContainers(bm *cnsbench.Benchmark, obj client.Object, annotations map[string]string, workloadSpec cnsbench.Workload) client.Object {
 	var err error
-	role := getRole(annotations)
+	role := r.getRole(annotations)
 
 	// If user is specifying output files, use those.  Otherwise, use the object's
 	// annotations
@@ -208,14 +208,14 @@ func (r *BenchmarkReconciler) addContainers(bm *cnsbench.Benchmark, obj client.O
 	return obj
 }
 
-func getCount(count int) int {
+func (r *BenchmarkReconciler) getCount(count int) int {
 	if count == 0 {
 		return 1
 	}
 	return count
 }
 
-func (r *BenchmarkReconciler) addLabels(workloadSpec cnsbench.Workload, obj client.Object, annotations map[string]string) (client.Object, error) {
+func (r *BenchmarkReconciler) addCNSBLabels(workloadSpec cnsbench.Workload, obj client.Object, annotations map[string]string) (client.Object, error) {
 	// Add workloadname and multiinstance labels to object
 	accessor := meta.NewAccessor()
 	labels, err := accessor.Labels(obj)
@@ -230,7 +230,7 @@ func (r *BenchmarkReconciler) addLabels(workloadSpec cnsbench.Workload, obj clie
 		labels["syncgroup"] = workloadSpec.SyncGroup
 	}
 	labels["workloadname"] = workloadSpec.Name //workloadName
-	labels["role"] = getRole(annotations)
+	labels["role"] = r.getRole(annotations)
 
 	/*
 		var multipleInstanceObjs []string
@@ -259,7 +259,7 @@ func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, k str
 	var objAnnotations map[string]string
 	accessor := meta.NewAccessor()
 
-	count := getCount(a.Count)
+	count := r.getCount(a.Count)
 
 	// Replace vars in workload spec with values from benchmark object
 	cmString := r.replaceVars(string(objBytes), a, w, count, workloadName, cm)
@@ -280,7 +280,7 @@ func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, k str
 	r.SetEnvVar("NUM_INSTANCES", strconv.Itoa(count), obj)
 
 	// Add workloadname and multiinstance labels to object
-	if obj, err = r.addLabels(a, obj, objAnnotations); err != nil {
+	if obj, err = r.addCNSBLabels(a, obj, objAnnotations); err != nil {
 		return err
 	}
 
