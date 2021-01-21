@@ -144,7 +144,7 @@ func (r *BenchmarkReconciler) loadScript(scriptName string) (string, error) {
 func (r *BenchmarkReconciler) createTmpConfigMap(bm *cnsbench.Benchmark, scriptName string) (string, error) {
 	script, err := r.loadScript(scriptName)
 	if err != nil {
-		r.Log.Error(err, "Error creating tmp configmap for "+scriptName)
+		r.Log.Error(err, "Error creating tmp configmap", "script", scriptName)
 		return "", err
 	}
 	newCm := corev1.ConfigMap{

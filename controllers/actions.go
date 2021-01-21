@@ -30,7 +30,7 @@ func (r *BenchmarkReconciler) createObj(bm *cnsbench.Benchmark, obj client.Objec
 
 	objMeta, err := meta.Accessor(obj)
 	if err != nil {
-		r.Log.Error(err, "Error getting ObjectMeta from obj", name)
+		r.Log.Error(err, "Error getting ObjectMeta from obj", "name", name)
 		return err
 	}
 

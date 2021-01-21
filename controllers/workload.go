@@ -72,18 +72,18 @@ func (r *BenchmarkReconciler) addParserContainer(bm *cnsbench.Benchmark, obj cli
 	}
 
 	if tmpCmName, err := r.createParserClone(bm, parser); err != nil {
-		r.Log.Error(err, "Error adding parser container", parser)
+		r.Log.Error(err, "Error adding parser container", "parser", parser)
 		return obj, err
 	} else {
 		imageName, err := r.getParserContainerImage(parser)
 		if err != nil {
-			r.Log.Error(err, "Error getting parser container image", parser)
+			r.Log.Error(err, "Error getting parser container image", "parser", parser)
 			return obj, err
 		}
 		r.Log.Info("Creating parser", "cmname", parser, "image", imageName)
 		obj, err = r.AddParserContainer(bm, obj, tmpCmName, outfile, imageName, num)
 		if err != nil {
-			r.Log.Error(err, "Error adding parser container", outfile)
+			r.Log.Error(err, "Error adding parser container", "outfile", outfile)
 			return obj, err
 		}
 		r.Log.Info("Created temp parser", "name", tmpCmName)
@@ -106,7 +106,7 @@ func (r *BenchmarkReconciler) addOutputContainer(bm *cnsbench.Benchmark, obj cli
 
 	obj, err := r.AddOutputContainer(bm, obj, outputArgs, outputScript, outputFile)
 	if err != nil {
-		r.Log.Error(err, "Error adding output container", outputFile)
+		r.Log.Error(err, "Error adding output container", "outfile", outputFile)
 		return obj, err
 	}
 	r.Log.Info("Added output container", "name", outputFile)
