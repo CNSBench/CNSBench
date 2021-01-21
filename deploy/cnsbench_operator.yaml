@@ -1231,8 +1231,3 @@ metadata:
   annotations:
     kubernetes.io/service-account.name: pod-watcher
 type: kubernetes.io/service-account-token
----
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: cnsbench-library

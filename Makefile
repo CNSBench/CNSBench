@@ -53,6 +53,14 @@ write-manifests: manifests kustomize
 	echo "---" >> deploy/cnsbench_operator.yaml
 	cat config/rbac/podwatcher.yaml >> deploy/cnsbench_operator.yaml
 
+deploy-from-manifests:
+	kubectl apply -f deploy/cnsbench_operator.yaml
+	cd workload-library && sh install.sh && cd ..
+
+undeploy-from-manifests:
+	kubectl delete -f deploy/cnsbench_operator.yaml
+	cd workload-library && sh uninstall.sh && cd ..
+
 # Uninstall CRDs from a cluster
 uninstall: manifests kustomize
 	$(KUSTOMIZE) build config/crd | kubectl delete -f -
@@ -62,11 +70,13 @@ deploy: manifests kustomize
 	cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
 	$(KUSTOMIZE) build config/default | kubectl apply -f -
 	kubectl apply -f config/rbac/podwatcher.yaml
+	cd workload-library && sh install.sh && cd ..
 
 # UnDeploy controller from the configured Kubernetes cluster in ~/.kube/config
 undeploy:
-	$(KUSTOMIZE) build config/default | kubectl delete -f -
-	kubectl delete -f config/rbac/podwatcher.yaml
+	$(KUSTOMIZE) build config/default | kubectl delete --ignore-not-found -f -
+	kubectl delete --ignore-not-found -f config/rbac/podwatcher.yaml
+	cd workload-library && sh uninstall.sh && cd ..
 
 # Generate manifests e.g. CRD, RBAC etc.
 manifests: controller-gen
