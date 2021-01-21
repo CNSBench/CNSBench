@@ -58,7 +58,7 @@ deploy-from-manifests:
 	cd workload-library && sh install.sh && cd ..
 
 undeploy-from-manifests:
-	kubectl delete -f deploy/cnsbench_operator.yaml
+	kubectl delete --ignore-not-found -f deploy/cnsbench_operator.yaml
 	cd workload-library && sh uninstall.sh && cd ..
 
 # Uninstall CRDs from a cluster
