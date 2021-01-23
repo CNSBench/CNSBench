@@ -596,7 +596,7 @@ func (r *BenchmarkReconciler) addSyncContainer(bm *cnsbench.Benchmark, obj clien
 
 	c := corev1.Container{}
 	c.Name = "sync-container"
-	c.Image = "dwdraju/alpine-curl-jq"
+	c.Image = "cnsbench/utility:latest"
 	c.Command = []string{"/scripts/ready.sh", "workloadname%3D" + workloadName, strconv.Itoa(numContainers * count)}
 	if syncGroup != "" {
 		c.Command = append(c.Command, "syncgroup%3D"+syncGroup)
@@ -606,8 +606,17 @@ func (r *BenchmarkReconciler) addSyncContainer(bm *cnsbench.Benchmark, obj clien
 			MountPath: "/scripts/",
 			Name:      "ready-script",
 		},
+		{
+			MountPath: "/var/run/secrets/kubernetes.io/podwatcher",
+			Name:      "pod-watcher-token",
+		},
 	}
 	spec.InitContainers = append(spec.InitContainers, c)
+
+	// Add volume for the token that allows helper containers to query api server
+	if obj, err = r.addPodWatcherToken(obj); err != nil {
+		return obj, err
+	}
 
 	if cmName, err := r.createTmpConfigMapFromDisk(bm, "ready.sh"); err != nil {
 		return obj, err
