@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 # $1 = querystring
 # $2 = number of containers need to be finished
