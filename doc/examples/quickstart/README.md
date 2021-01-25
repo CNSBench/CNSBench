@@ -1,9 +1,18 @@
-This quickstart example uses
-[LocalVolumes](https://kubernetes.io/docs/concepts/storage/storage-classes/#local),
-which creates a storage class that binds PVCs to PVs that have been
-pre-provisioned using local storage on a node in the cluster.  So, first select
-a node in your cluster and create a directory on that node that will be used for
-our workload's storage volume.  Update `pv.yaml` accordingly:
+### Quickstart
+
+This example will demonstrate using CNSBench to instantiate an I/O workload
+([fio](../../../workload-library/workloads/fio)).  It does not require a storage
+provider to be installed or configured, instead it uses
+[LocalVolumes](https://kubernetes.io/docs/concepts/storage/storage-classes/#local)
+to provision storage volumes.
+
+### Running
+
+First, [install CNSBench](../../../#download-install).
+
+Next, setup the LocalVolume storage: select a node in your cluster and create a
+directory on that node that will be used for our workload's storage volume.
+Update `pv.yaml` accordingly:
 1. Update the selector in the Node Affinity section to refer to the name of the
    node that you have selected.  The default value is "minikube".
 2. Update the local path to point to the directory created on your selected
