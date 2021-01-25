@@ -1,14 +1,14 @@
 ### Quickstart
 
 This example will demonstrate using CNSBench to instantiate an I/O workload
-([fio](../../../workload-library/workloads/fio)).  It does not require a storage
+([fio](https://github.com/CNSBench/workload-library/tree/master/workloads/fio)).  It does not require a storage
 provider to be installed or configured, instead it uses
 [LocalVolumes](https://kubernetes.io/docs/concepts/storage/storage-classes/#local)
 to provision storage volumes.
 
 ### Running
 
-First, [install CNSBench](../../../#download-install).
+First, [install CNSBench](https://github.com/CNSBench/CNSBench/#download-install).
 
 Next, setup the LocalVolume storage: select a node in your cluster and create a
 directory on that node that will be used for our workload's storage volume.
