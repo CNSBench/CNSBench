@@ -1,9 +1,0 @@
-1. Create a LocalDevice storage class (`kubectl apply -f local-sc.yaml`)
-2. Choose a node that will host the local volume, create a directory on that
-   node which will be used to store the data on the volume.
-3. Update pv.yaml spec.local.path to point to the directory created in step 2
-   and spec.nodeAffinity.required.nodeSelectorTerms[0].matchExpressions[0].values[0]
-   to be the node chosen in step 2.
-4. Create the volume (`kubectl apply -f pv.yaml`)
-5. Install the quickstart workload in your Workload Library (`kubectl apply -f workload.yaml`)
-6. Run the benchmark (`kubectl apply -f benchmark.yaml`)

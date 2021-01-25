@@ -7,10 +7,10 @@ spec:
     storage: 5Gi
   accessModes:
   - ReadWriteOnce
-  persistentVolumeReclaimPolicy: Retain
+  persistentVolumeReclaimPolicy: Delete
   storageClassName: local-storage
   local:
-    path:
+    path: /mnt/sda1/data/pv1
   nodeAffinity:
     required:
       nodeSelectorTerms:
@@ -18,4 +18,4 @@ spec:
         - key: kubernetes.io/hostname
           operator: In
           values:
-          -
+          - minikube

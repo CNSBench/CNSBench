@@ -5,14 +5,16 @@ metadata:
 spec:
   workloads:
     - name: quickstart
-      workload: quickstart-filebench
+      workload: fio
       outputFiles:
-      - filename: /output/output
+      - filename: /output/output.json
         parser: null-parser
         target: workload
         sink: es
       vars:
         storageClass: local-storage
+        fiosize: 500Mi
+        pvcsize: 1Gi
   outputs:
     - name: es
       httpPostSpec:
