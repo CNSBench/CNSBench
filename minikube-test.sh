@@ -35,5 +35,4 @@ sleep 10
 kubectl get pods -ncnsbench-system
 kubectl apply -f doc/examples/quickstart/local-sc.yaml
 kubectl apply -f doc/examples/quickstart/pv.yaml
-kubectl apply -f doc/examples/quickstart/workload.yaml
 kubectl apply -f doc/examples/quickstart/benchmark.yaml
