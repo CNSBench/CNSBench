@@ -11,9 +11,10 @@ CNSBench has been tested on Kubernetes v1.20.0.
 
 # Download & Install<a name="download-install"></a>
 
-This repository includes a submodule for the [Workload
-Library](https://github.com/CNSBench/workload-library), so be sure to clone with
-`--recurse-submodules`.
+Clone CNSBench with the Workload Library:
+```
+git clone git@github.com:CNSBench/CNSBench.git --recurse-submodules
+```
 
 To install either do
 ```
