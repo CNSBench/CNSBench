@@ -33,7 +33,7 @@ namespace for workload definitions.
 # Usage
 
 See the [quickstart guide](doc/examples/quickstart) to get started.
-Alternativly, if minikube is installed you can just run `sh minikube-test.sh`
+Alternatively, if minikube is installed you can just run `sh minikube-test.sh`
 which will start minikube, install CNSBench, setup a local storage provider, and
 run a sample benchmark.
 
