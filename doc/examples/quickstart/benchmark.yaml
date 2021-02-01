@@ -8,7 +8,7 @@ spec:
       workload: fio
       outputFiles:
       - filename: /output/output.json
-        parser: null-parser
+        parser: basic-parser
         target: workload
         sink: es
       vars:

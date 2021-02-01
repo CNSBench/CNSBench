@@ -33,10 +33,14 @@ namespace for workload definitions.
 
 # Usage
 
-See the [quickstart guide](doc/examples/quickstart) to get started.
-Alternatively, if minikube is installed you can just run `sh minikube-test.sh`
-which will start minikube, install CNSBench, setup a local storage provider, and
-run a sample benchmark.
+If minikube is installed, running `sh minikube-test.sh` will start minikube,
+install CNSBench, setup a local storage provider, and run a sample benchmark.
+
+Running these steps manually is also easy:
+
+[![asciicast](doc/examples/quickstart/asciinema.svg)](https://asciinema.org/a/OT0LQXxUe6dtowlxOwkL4zSdu)
+
+See the [quickstart guide](doc/examples/quickstart) for more details.
 
 When a new Benchmark resource is created the CNSBench controller will run the
 I/O and control workloads specified in that resource.  See
