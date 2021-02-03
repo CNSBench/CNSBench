@@ -169,8 +169,8 @@ func (r *BenchmarkReconciler) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Wor
 func (r *BenchmarkReconciler) CreateSnapshot(bm *cnsbench.Benchmark, s cnsbench.Snapshot, actionName string) error {
 	ls := &metav1.LabelSelector{}
 
-	if s.ActionName != "" {
-		ls = metav1.AddLabelToSelector(ls, "workloadname", s.ActionName)
+	if s.WorkloadName != "" {
+		ls = metav1.AddLabelToSelector(ls, "workloadname", s.WorkloadName)
 	} else if s.VolumeName != "" {
 		ls = metav1.AddLabelToSelector(ls, "volumename", s.VolumeName)
 	}

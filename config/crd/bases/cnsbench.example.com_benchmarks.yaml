@@ -126,12 +126,12 @@ spec:
                         "random", ???
                       nullable: true
                       properties:
-                        actionName:
-                          nullable: true
-                          type: string
                         snapshotClass:
                           type: string
                         volumeName:
+                          nullable: true
+                          type: string
+                        workloadName:
                           nullable: true
                           type: string
                       required:

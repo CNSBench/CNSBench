@@ -546,7 +546,8 @@ func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, k str
 	// If this object is a volume but the user supplied a non default volume
 	// name, skip creating this object
 	nonDefaultVol, _ := a.Vars["volname"]
-	if r.getRole(objAnnotations) == "volume" && nonDefaultVol {
+	nonDefaultVolBool, _ := strconv.ParseBool(nonDefaultVol)
+	if r.getRole(objAnnotations) == "volume" && nonDefaultVolBool {
 		r.Log.Info("This is volume but non default volume name supplied, skipping")
 		return nil
 	}
