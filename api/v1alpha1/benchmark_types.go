@@ -62,7 +62,7 @@ type Rate struct {
 type Snapshot struct {
 	// +optional
 	// +nullable
-	ActionName string `json:"actionName"`
+	WorkloadName string `json:"workloadName"`
 
 	// +optional
 	// +nullable
