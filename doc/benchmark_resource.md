@@ -21,6 +21,8 @@ Describes the fields of a cnsbench.Benchmark object.  Field names that are in
 | controlOperations<br />*[][cnsbench.ControlOperation](#cnsbenchcontroloperation)* | Array of cnsbench.ControlOperation specifications for the control operations CNSBench will execute. |
 | rates<br />*[][cnsbench.Rate](#cnsbenchrate)* | Array of Rates that are used to trigger the creation of a volume, instantiation of an I/O workload, or execution of control operations. |
 | outputs<br />*[][cnsbench.Ouptut](#cnsbenchoutput)* | Array of cnsbench.Output specifications. |
+| allWorkloadOutput<br />*string* | Name of the cnsbench.Output specification that describes where workload output should be sent, unless otherwise specified in the cnsbench.Workload specification.  In other words, this is the default output for the workloads.  If not specified, the [default output collector](output_collector.md) is used. |
+| metadataOutput<br />*string* | Name of the cnsbench.Output specification that describes where the metadata output should be sent.  Metadata information includes the benchmark specification, start and end times, number of objects created, etc. If not specified, metadata output is sent to the [default output collector](output_collector.md). |
 
 ### cnsbench.BenchmarkStatus
 | Field | Description |
@@ -55,31 +57,33 @@ kubectl wait --for=condition=Complete benchmark/benchmark-name
 | **name**<br />*string* | Name of workload instance.  If multiple workloads are instantiated (e.g. if Count is specified, or if an associated rate causes more workloads to be instantiated), the number of the workload will be appended. |
 | **workload**<br />*string* | Name of workload to instantiate. See https://github.com/CNSBench/workload-library/tree/master/workloads for available workloads. |
 | vars<br />*map[string]string* | Map of parameter and the values they will be set to.  See the workload's documentation for available parameters.
-| count<br />*int* | Number of workloads to instantiate. |
-| syncGroup<br />*string* | All workloads with the same sync group label are 
-| outputFiles<br />*[][cnsbench.OutputFile](#cnsbenchoutputfile)* | Array of cnsbench.OutputFiles. |
+| count<br />*int* | Number of workloads to instantiate. Defaults to 1. |
+| syncGroup<br />*string* | All workloads with the same sync group label will wait for each other to finish initialization before running their actual workload. |
+| outputFiles<br />*[][cnsbench.OutputFile](#cnsbenchoutputfile)* | Array of cnsbench.OutputFiles.  If not specified, the default output file and parser defined by the workload are used. |
 | rateName<br />*string* | Rate that will run this workload. Workload is instantiated when Benchmark is instantiated if no rate is provided. |
 
 ### cnsbench.OutputFile
 | Field | Description |
 | :- | - |
 | **filename**<br />*string* | Filename from workload to parse. |
-| parser<br />*string* | Parser to use. |
-| target<br />*string* | Part of the workload with the file that should be parsed. |
-| sink<br />*string* | Name of the cnsbench.Output that the parsed output will be sent to. |
+| parser<br />*string* | Parser to use. Defaults to the [null-parser](https://github.com/CNSBench/workload-library/tree/master/parsers). |
+| target<br />*string* | Part of the workload with the file that should be parsed. Matches on a workload resource's [role](https://github.com/CNSBench/workload-library/tree/master/workloads#workload-resource-annotations) annotation.  By default matches resources with role="workload". |
+| sink<br />*string* | Name of the cnsbench.Output that the parsed output will be sent to.  Defaults to the Benchmark's `allWorkloadOutput` value if not set (`allWorkloadOutput` defaults to the [default output collector](output_collector.md) if it is also not set.) |
 
 # ControlOperations
 ### cnsbench.ControlOperation
+Only one of `snapshotSpec`, `scaleSpec`, or `deleteSpec` should be set.
 | Field | Description |
 | :- | - |
 | **name**<br />*string*| Name of the control operation. |
 | snapshotSpec <br />*[cnsbench.Snapshot](#snapshot)* | cnsbench.Snapshot specification.  This control operation will snapshot a volume. |
 | scaleSpec<br />*[cnsbench.Scale](#scale)* | cnsbench.Scale specification. This control operation will scale a resource. |
 | deleteSpec<br />*[cnsbench.Delete](#delete)* | cnsbench.Delete specification. This control operation will delete a resource. |
-| outputs<br />*[cnsbench.ActionOutput](#action-output)* | cnsbench.ActionOutput that specifies where output from this control operation should be sent. |
-| rateName<br />*string* | Name of the cnsbench.Rate that triggers this control operation. |
+| outputs<br />*[cnsbench.ActionOutput](#action-output)* | cnsbench.ActionOutput that specifies where output from this control operation should be sent. Defaults to the [default output collector](output_collector.md). |
+| **rateName**<br />*string* | Name of the cnsbench.Rate that triggers this control operation. |
 
 ### cnsbench.Snapshot
+Only one of `workloadName` or `volumeName` should be set.
 | Field | Description |
 | :- | - |
 | workloadName<br />*string* | Name of a [cnsbench.Workload](#cnsbenchworkload). CNSBench will snapshot all volumes created for this workload (i.e., volumes whose resource definition is included as part of the I/O workload specification). |
@@ -103,7 +107,7 @@ be generalized to support additional kinds of resources.
 ### cnsbench.ActionOutput
 | Field | Description |
 | :- | - |
-| outputName<br />*string* | Name of cnsbench.Output which specifies where a control operation's output should be sent.
+| outputName<br />*string* | Name of cnsbench.Output which specifies where a control operation's output should be sent. |
 
 # Volumes
 ### cnsbench.Volume
