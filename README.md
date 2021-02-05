@@ -9,19 +9,19 @@ that can be run on Kubernetes could be used to generate an I/O workload.
 
 CNSBench has been tested on Kubernetes v1.20.0.
 
-# Download & Install<a name="download-install"></a>
+# Download and Install<a name="download-install"></a>
 
 Clone CNSBench with the Workload Library:
-```
+```Shell
 git clone git@github.com:CNSBench/CNSBench.git --recurse-submodules
 ```
 
 To install either do
-```
+```Shell
 make deploy-from-manifests
 ```
 or
-```
+```Shell
 kubectl apply -f deploy/cnsbench_operator.yaml
 cd workload-library && sh install.sh && cd ..
 ```
@@ -40,12 +40,8 @@ Running these steps manually is also easy:
 
 [![asciicast](doc/examples/quickstart/asciinema.svg)](https://asciinema.org/a/OT0LQXxUe6dtowlxOwkL4zSdu)
 
-See the [quickstart guide](doc/examples/quickstart) for more details.
-
-When a new Benchmark resource is created the CNSBench controller will run the
-I/O and control workloads specified in that resource.  See
-[here](doc/benchmark\_resource.md) for details on how to specify a Benchmark
-resource.
+See the [quickstart guide](doc/examples/quickstart) or the other
+[documentation](doc) for more details.
 
 # Paper
 

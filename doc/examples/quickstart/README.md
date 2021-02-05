@@ -19,31 +19,31 @@ Update `pv.yaml` accordingly:
    node.  The default value is "/mnt/sda1/data/pv1".
 
 Then, create the PV and the storage class:
-```
+```Shell
 kubectl apply -f pv.yaml
 kubectl apply -f local-sc.yaml
 ```
 
 Run the benchmark by creating the Benchmark resource specified in
 `benchmark.yaml`:
-```
+```Shell
 kubectl apply -f benchmark.yaml
 ```
 
 The CNSBench controller should start an fio workload.  The output from the
 benchmark will be sent to the default CNSBench output collector, which you can
 watch with:
-```
+```Shell
 kubectl logs -f cnsbench-output-collector -ncnsbench-system
 ```
 
 ### Cleanup
 
 To delete any resources created during the benchmark run, do
-```
+```Shell
 kubeclt delete -f benchmark.yaml
 ```
 The PV needs to be deleted as well:
-```
+```Shell
 kubectl delete -f pv.yaml
 ```

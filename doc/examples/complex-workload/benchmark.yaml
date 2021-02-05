@@ -1,7 +1,7 @@
 apiVersion: cnsbench.example.com/v1alpha1
 kind: Benchmark
 metadata:
-  name: etcd-benchmark
+  name: example-etcd-benchmark
 spec:
   metadataOutput: es-metadata
   workloads:

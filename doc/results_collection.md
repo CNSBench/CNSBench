@@ -11,7 +11,7 @@ How results and metrics are collected depend on what the selected parsers output
 from the workloads, where output is configured to be sent, and what metrics
 collection agents are running in the cluster.  In general, it is useful to get
 the start and end times of the benchmark run:
-```
+```Shell
 starttime=`kubectl get benchmark -ojson | jq .items[0].status.initCompletionTimeUnix`
 endtime=`kubectl get benchmark -ojson | jq .items[0].status.completionTimeUnix`
 ```
@@ -19,7 +19,7 @@ endtime=`kubectl get benchmark -ojson | jq .items[0].status.completionTimeUnix`
 These timestamps can be used to query whichever metrics collection database is
 in use.  For example, to query Metricbeat metrics in an Elasticsearch database,
 you could do:
-```
+```Shell
 curl -X GET "es-instance:9200/metricbeat-index/_search?pretty" -H 'Content-Type: application/json' -d'
 {
   "query": {

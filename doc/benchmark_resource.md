@@ -38,7 +38,7 @@ Describes the fields of a cnsbench.Benchmark object.  Field names that are in
 
 ### cnsbench.BenchmarkCondition
 Same as the condition resources for other kinds of resource, e.g. [PodCondition](https://kubernetes.io/docs/reference/generated/kubernetes-api/v1.20/#podcondition-v1-core).  Currently the only condition type is "Complete", which indicates if the benchmark has finished (i.e., all workloads have finished running.)  The `kubectl wait` command can be used to watch for this condition to become True:
-```
+```Shell
 kubectl wait --for=condition=Complete benchmark/benchmark-name
 ```
 | Field | Description |

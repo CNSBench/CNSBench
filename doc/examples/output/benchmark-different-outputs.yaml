@@ -5,7 +5,7 @@ metadata:
 spec:
   workloads:
     - name: rw1
-      workload: fio-test-workload
+      workload: example-fio-workload
       outputFiles:
       - filename: /output/output
         parser: fio-elapsed-time-parser
@@ -13,7 +13,7 @@ spec:
       vars:
         storageClass: default
     - name: rw2
-      workload: fio-test-workload
+      workload: example-fio-workload
       outputFiles:
       - filename: /output/output
         parser: fio-elapsed-time-parser

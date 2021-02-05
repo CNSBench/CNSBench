@@ -27,11 +27,11 @@ When the HTTP server receives data, it prints a JSON object with:
 This output can be viewed with the command `kubectl logs
 cnsbench-output-collector -ncnsbench-system`.  To save output to a file for
 processing at a later time, do
-```
+```Shell
 kubectl logs cnsbench-output-collector -ncnsbench-system > outfile
 ```
 or to save output as it is received,
-```
+```Shell
 kubectl logs -f cnsbench-output-collector -ncnsbench-system > outfile
 ```
 
@@ -42,7 +42,7 @@ workload which is sent to the "fio" endpoint" and a
 [filebench](https://github.com/CNSBench/workload-library/tree/master/workloads/filebench)
 workload which is sent to the "filebench" endpoint, the output can be saved to
 separate files:
-```
+```Shell
 kubectl logs -f cnsbench-output-collector -ncnsbench-system | grep -v metadata | grep fio > fio-outfile
 kubectl logs -f cnsbench-output-collector -ncnsbench-system | grep -v metadata | grep filebench > filebench-outfile
 ```

@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: etcd-workload
+  name: complex-etcd-workload
   namespace: cnsbench-library
   labels:
     type: workload

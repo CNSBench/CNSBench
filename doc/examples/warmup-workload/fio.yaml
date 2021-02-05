@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: fio-warmup-workload
+  name: example-fio-warmup-workload
   namespace: cnsbench-library
   labels:
     type: workload

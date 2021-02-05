@@ -5,7 +5,7 @@ metadata:
 spec:
   workloads:
     - name: rw
-      workload: fio-warmup-workload
+      workload: example-fio-warmup-workload
       outputFiles:
       - filename: /output/output
         sink: es
