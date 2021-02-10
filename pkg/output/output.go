@@ -15,7 +15,7 @@ type OutputStruct struct {
 	InitCompletionTime int64                  `json:"initCompletionTime"`
 }
 
-func doOutput(outputs []cnsbench.Output, reader io.Reader, outputName, benchmarkName string) {
+func doOutput(outputs []cnsbench.Output, reader *bytes.Reader, outputName, benchmarkName string) {
 	if outputName == "" {
 		if err := HttpPost(reader, "http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/metadata/"+benchmarkName); err != nil {
 			fmt.Println(err)
@@ -37,13 +37,13 @@ func doOutput(outputs []cnsbench.Output, reader io.Reader, outputName, benchmark
 	}
 }
 
-func Metric(outputs []cnsbench.Output, outputName, benchmarkName, metrics ...string) {
+func Metric(outputs []cnsbench.Output, outputName, benchmarkName string, metrics ...string) {
 	if (len(metrics) % 2) != 0 {
 		fmt.Println("!!! uneven number of metric key, value pairs given.  Ignoring last string")
 		metrics = metrics[:len(metrics)-1]
 	}
 	metricsMap := make(map[string]string, 0)
-	for i:=0; i<len(metrics); i+=2 {
+	for i := 0; i < len(metrics); i += 2 {
 		metricsMap[metrics[i]] = metrics[i+1]
 	}
 	jsonObj, err := json.Marshal(metricsMap)
@@ -70,7 +70,7 @@ func Output(outputName string, bm *cnsbench.Benchmark, startTime, completionTime
 	}
 	reader := bytes.NewReader(buf.Bytes())
 
-	doOutput(bm.Spec.Ouptuts, reader, outputName, bm.ObjectMeta.Name)
+	doOutput(bm.Spec.Outputs, reader, outputName, bm.ObjectMeta.Name)
 
 	return nil
 }

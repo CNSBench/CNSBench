@@ -19,6 +19,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -62,7 +63,7 @@ type BenchmarkReconciler struct {
 
 func (r *BenchmarkReconciler) metric(instance *cnsbench.Benchmark, metricType string, metrics ...string) {
 	metrics = append([]string{"type", metricType}, metrics...)
-	output.Metric(instance.Spec.Outputs, instance.Spec.MetadataOutput, instance.ObjectMeta.Name, metrics)
+	output.Metric(instance.Spec.Outputs, instance.Spec.MetadataOutput, instance.ObjectMeta.Name, metrics...)
 }
 
 func (r *BenchmarkReconciler) cleanup(instance *cnsbench.Benchmark) error {
