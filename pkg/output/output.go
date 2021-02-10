@@ -46,14 +46,9 @@ func Metric(outputs []cnsbench.Output, outputName, benchmarkName string, metrics
 	for i := 0; i < len(metrics); i += 2 {
 		metricsMap[metrics[i]] = metrics[i+1]
 	}
-	jsonObj, err := json.Marshal(metricsMap)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
 
 	buf := new(bytes.Buffer)
-	if err := json.NewEncoder(buf).Encode(jsonObj); err != nil {
+	if err := json.NewEncoder(buf).Encode(metricsMap); err != nil {
 		fmt.Println(err)
 		return
 	}
