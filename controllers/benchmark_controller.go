@@ -60,6 +60,10 @@ type BenchmarkReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=services/finalizers;services;pods;endpoints;persistentvolumeclaims;events;configmaps;secrets,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments;daemonsets;replicasets;statefulsets,verbs=create;delete;get;list;patch;update;watch
 
+func (r *BenchmarkReconciler) metric(instance *cnsbench.Benchmark, message) {
+	output.Metric(bm.Spec.MetadataOutput, bm.ObjectMeta.Name, message)
+}
+
 func (r *BenchmarkReconciler) cleanup(instance *cnsbench.Benchmark) error {
 	r.Log.Info("Deleting", "finalizers", instance.GetFinalizers())
 	r.Log.Info("status", "status", instance.Status)

@@ -15,6 +15,38 @@ type OutputStruct struct {
 	InitCompletionTime int64
 }
 
+type MetricStruct struct {
+	Name	string
+	Type	string
+	Metric	string
+}
+
+func Metric(outputName, benchmarkName, metricType, metric) {
+	o := MetricStruct{benchmarkName, metricType, metric}
+	buf := new(bytes.Buffer)
+	if err := json.NewEncoder(buf).Encode(o); err != nil {
+		return err
+	}
+	reader := bytes.NewReader(buf.Bytes())
+	if outputName == "" {
+		if err := HttpPost(reader, "http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/metadata/"+bm.ObjectMeta.Name); err != nil {
+			return err
+		}
+	} else {
+		for _, out := range bm.Spec.Outputs {
+			fmt.Println(out)
+			fmt.Println(outputName)
+			if out.Name == outputName {
+				if out.HttpPostSpec.URL != "" {
+					if err := HttpPost(reader, out.HttpPostSpec.URL); err != nil {
+						return err
+					}
+				}
+			}
+		}
+	}
+}
+
 func Output(outputName string, bm *cnsbench.Benchmark, startTime, completionTime, initCompletionTime int64) error {
 	o := OutputStruct{bm.ObjectMeta.Name, bm.Spec, startTime, completionTime, initCompletionTime}
 	buf := new(bytes.Buffer)

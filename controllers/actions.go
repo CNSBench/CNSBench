@@ -63,6 +63,8 @@ func (r *BenchmarkReconciler) createObj(bm *cnsbench.Benchmark, obj client.Objec
 		}
 	}
 
+	r.metric(bm, "createObj", name)
+
 	err = r.controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForOwner{
 		IsController: false,
 		OwnerType:    &cnsbench.Benchmark{},
