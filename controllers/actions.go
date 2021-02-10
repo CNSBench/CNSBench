@@ -27,6 +27,7 @@ import (
 
 func (r *BenchmarkReconciler) createObj(bm *cnsbench.Benchmark, obj client.Object, makeOwner bool) error {
 	name, err := meta.NewAccessor().Name(obj)
+	kind, err := meta.NewAccessor().Kind(obj)
 
 	objMeta, err := meta.Accessor(obj)
 	if err != nil {
@@ -63,7 +64,7 @@ func (r *BenchmarkReconciler) createObj(bm *cnsbench.Benchmark, obj client.Objec
 		}
 	}
 
-	r.metric(bm, "createObj", name)
+	r.metric(bm, "createObj", "name", name, "kind", kind)
 
 	err = r.controller.Watch(&source.Kind{Type: obj}, &handler.EnqueueRequestForOwner{
 		IsController: false,

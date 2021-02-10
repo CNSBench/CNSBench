@@ -15,20 +15,7 @@ type OutputStruct struct {
 	InitCompletionTime int64 `json:"initCompletionTime"`
 }
 
-type MetricStruct struct {
-	Name   string `json:"name"`
-	Type   string `json:"type"`
-	Metric string `json:"metric"`
-}
-
-func Metric(outputs []cnsbench.Output, outputName, benchmarkName, metricType, metric string) {
-	o := MetricStruct{benchmarkName, metricType, metric}
-	buf := new(bytes.Buffer)
-	if err := json.NewEncoder(buf).Encode(o); err != nil {
-		fmt.Println(err)
-		return
-	}
-	reader := bytes.NewReader(buf.Bytes())
+func doOutput(outputs []cnsbench.Output, reader io.Reader, outputName, benchmarkName string) {
 	if outputName == "" {
 		if err := HttpPost(reader, "http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/metadata/"+benchmarkName); err != nil {
 			fmt.Println(err)
@@ -50,6 +37,31 @@ func Metric(outputs []cnsbench.Output, outputName, benchmarkName, metricType, me
 	}
 }
 
+func Metric(outputs []cnsbench.Output, outputName, benchmarkName, metrics ...string) {
+	if (len(metrics) % 2) != 0 {
+		fmt.Println("!!! uneven number of metric key, value pairs given.  Ignoring last string")
+		metrics = metrics[:len(metrics)-1]
+	}
+	metricsMap := make(map[string]string, 0)
+	for i:=0; i<len(metrics); i+=2 {
+		metricsMap[metrics[i]] = metrics[i+1]
+	}
+	jsonObj, err := json.Marshal(metricsMap)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	buf := new(bytes.Buffer)
+	if err := json.NewEncoder(buf).Encode(jsonObj); err != nil {
+		fmt.Println(err)
+		return
+	}
+	reader := bytes.NewReader(buf.Bytes())
+
+	doOutput(outputs, reader, outputName, benchmarkName)
+}
+
 func Output(outputName string, bm *cnsbench.Benchmark, startTime, completionTime, initCompletionTime int64) error {
 	o := OutputStruct{bm.ObjectMeta.Name, bm.Spec, startTime, completionTime, initCompletionTime}
 	buf := new(bytes.Buffer)
@@ -58,22 +70,7 @@ func Output(outputName string, bm *cnsbench.Benchmark, startTime, completionTime
 	}
 	reader := bytes.NewReader(buf.Bytes())
 
-	if outputName == "" {
-		if err := HttpPost(reader, "http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/metadata/"+bm.ObjectMeta.Name); err != nil {
-			return err
-		}
-	} else {
-		for _, out := range bm.Spec.Outputs {
-			fmt.Println(out)
-			fmt.Println(outputName)
-			if out.Name == outputName {
-				if out.HttpPostSpec.URL != "" {
-					if err := HttpPost(reader, out.HttpPostSpec.URL); err != nil {
-						return err
-					}
-				}
-			}
-		}
-	}
+	doOutput(bm.Spec.Ouptuts, reader, outputName, bm.ObjectMeta.Name)
+
 	return nil
 }

@@ -60,8 +60,9 @@ type BenchmarkReconciler struct {
 // +kubebuilder:rbac:groups=core,resources=services/finalizers;services;pods;endpoints;persistentvolumeclaims;events;configmaps;secrets,verbs=create;delete;get;list;patch;update;watch
 // +kubebuilder:rbac:groups=apps,resources=deployments;daemonsets;replicasets;statefulsets,verbs=create;delete;get;list;patch;update;watch
 
-func (r *BenchmarkReconciler) metric(instance *cnsbench.Benchmark, metricType, metric string) {
-	output.Metric(instance.Spec.Outputs, instance.Spec.MetadataOutput, instance.ObjectMeta.Name, metricType, metric)
+func (r *BenchmarkReconciler) metric(instance *cnsbench.Benchmark, metricType string, metrics ...string) {
+	metrics = append([]string{"type", metricType}, metrics...)
+	output.Metric(instance.Spec.Outputs, instance.Spec.MetadataOutput, instance.ObjectMeta.Name, metrics)
 }
 
 func (r *BenchmarkReconciler) cleanup(instance *cnsbench.Benchmark) error {
@@ -341,6 +342,8 @@ func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	return ctrl.Result{}, nil
 }
 
+// This will create the rate and run it in a separate goroutine.  Returns the
+// channel that the rate will trigger on
 func (r *BenchmarkReconciler) createConstantRate(spec cnsbench.ConstantRate, c chan bool) chan int {
 	r.Log.Info("Launching SingleRate")
 	consumerChan := make(chan int)
@@ -349,6 +352,8 @@ func (r *BenchmarkReconciler) createConstantRate(spec cnsbench.ConstantRate, c c
 	return consumerChan
 }
 
+// This will create the rate and run it in a separate goroutine.  Returns the
+// channel that the rate will trigger on
 func (r *BenchmarkReconciler) createConstantIncreaseDecreaseRate(spec cnsbench.ConstantIncreaseDecreaseRate, c chan bool) chan int {
 	r.Log.Info("Launching IncDecRate")
 	consumerChan := make(chan int)
@@ -357,6 +362,7 @@ func (r *BenchmarkReconciler) createConstantIncreaseDecreaseRate(spec cnsbench.C
 	return consumerChan
 }
 
+// This is triggered by a rate via the rateCh channel
 func (r *BenchmarkReconciler) runControlOps(bm *cnsbench.Benchmark, rateCh chan int, controlCh chan bool, rateName string) {
 	for {
 		select {
@@ -365,6 +371,7 @@ func (r *BenchmarkReconciler) runControlOps(bm *cnsbench.Benchmark, rateCh chan 
 			return
 		case n := <-rateCh:
 			r.Log.Info("Got rate!", "n", n)
+			r.metric(bm, "rateFired", "rateName", rateName, "n", strconv.Itoa(n))
 			for _, a := range bm.Spec.Volumes {
 				if a.RateName == rateName {
 					r.CreateVolume(bm, a)
