@@ -8,11 +8,11 @@ import (
 )
 
 type OutputStruct struct {
-	Name               string `json:"name"`
+	Name               string                 `json:"name"`
 	Spec               cnsbench.BenchmarkSpec `json:"spec"`
-	StartTime          int64 `json:"startTime"`
-	CompletionTime     int64 `json:"completionTime"`
-	InitCompletionTime int64 `json:"initCompletionTime"`
+	StartTime          int64                  `json:"startTime"`
+	CompletionTime     int64                  `json:"completionTime"`
+	InitCompletionTime int64                  `json:"initCompletionTime"`
 }
 
 func doOutput(outputs []cnsbench.Output, reader io.Reader, outputName, benchmarkName string) {
