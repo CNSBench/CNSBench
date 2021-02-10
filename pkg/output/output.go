@@ -16,30 +16,33 @@ type OutputStruct struct {
 }
 
 type MetricStruct struct {
-	Name	string
-	Type	string
-	Metric	string
+	Name   string
+	Type   string
+	Metric string
 }
 
-func Metric(outputName, benchmarkName, metricType, metric) {
+func Metric(outputs []cnsbench.Output, outputName, benchmarkName, metricType, metric string) {
 	o := MetricStruct{benchmarkName, metricType, metric}
 	buf := new(bytes.Buffer)
 	if err := json.NewEncoder(buf).Encode(o); err != nil {
-		return err
+		fmt.Println(err)
+		return
 	}
 	reader := bytes.NewReader(buf.Bytes())
 	if outputName == "" {
-		if err := HttpPost(reader, "http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/metadata/"+bm.ObjectMeta.Name); err != nil {
-			return err
+		if err := HttpPost(reader, "http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/metadata/"+benchmarkName); err != nil {
+			fmt.Println(err)
+			return
 		}
 	} else {
-		for _, out := range bm.Spec.Outputs {
+		for _, out := range outputs {
 			fmt.Println(out)
 			fmt.Println(outputName)
 			if out.Name == outputName {
 				if out.HttpPostSpec.URL != "" {
 					if err := HttpPost(reader, out.HttpPostSpec.URL); err != nil {
-						return err
+						fmt.Println(err)
+						return
 					}
 				}
 			}
