@@ -102,6 +102,7 @@ func (r *BenchmarkReconciler) startWorkloads(instance *cnsbench.Benchmark, workl
 func (r *BenchmarkReconciler) startRates(instance *cnsbench.Benchmark) error {
 	instance.Status.RunningRates = 0
 	var c chan int
+	r.controlChannels[instance.ObjectMeta.Name] = make(chan bool)
 	for _, rate := range instance.Spec.Rates {
 		if rate.ConstantRateSpec.Interval != 0 {
 			c = r.createConstantRate(rate.ConstantRateSpec, r.controlChannels[instance.ObjectMeta.Name])
