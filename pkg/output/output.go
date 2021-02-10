@@ -8,17 +8,17 @@ import (
 )
 
 type OutputStruct struct {
-	Name               string
-	Spec               cnsbench.BenchmarkSpec
-	StartTime          int64
-	CompletionTime     int64
-	InitCompletionTime int64
+	Name               string `json:"name"`
+	Spec               cnsbench.BenchmarkSpec `json:"spec"`
+	StartTime          int64 `json:"startTime"`
+	CompletionTime     int64 `json:"completionTime"`
+	InitCompletionTime int64 `json:"initCompletionTime"`
 }
 
 type MetricStruct struct {
-	Name   string
-	Type   string
-	Metric string
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	Metric string `json:"metric"`
 }
 
 func Metric(outputs []cnsbench.Output, outputName, benchmarkName, metricType, metric string) {
