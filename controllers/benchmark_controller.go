@@ -90,7 +90,6 @@ func (r *BenchmarkReconciler) createVolumes(instance *cnsbench.Benchmark, vols [
 
 // Only starts workloads that do not have any rates associated
 func (r *BenchmarkReconciler) startWorkloads(instance *cnsbench.Benchmark, workloads []cnsbench.Workload) error {
-	instance.Status.RunningWorkloads = 0
 	for _, a := range workloads {
 		if err := r.RunWorkload(instance, a, a.Name); err != nil {
 			return err
@@ -178,7 +177,8 @@ func (r *BenchmarkReconciler) getCompletedPods(workloads []cnsbench.Workload, en
 	return complete, nil
 }
 
-func (r *BenchmarkReconciler) addDefaultOutputs(instance *cnsbench.Benchmark) {
+func (r *BenchmarkReconciler) addDefaultOutputs(instance *cnsbench.Benchmark) bool {
+	updated := false
 	endpoints := map[string]string{
 		"defaultWorkloadsOutput": "workloads",
 		"defaultMetadataOutput":  "metadata",
@@ -193,6 +193,7 @@ func (r *BenchmarkReconciler) addDefaultOutputs(instance *cnsbench.Benchmark) {
 			}
 		}
 		if !found {
+			r.Log.Info("Not found")
 			newOutput := cnsbench.Output{
 				Name: outputName,
 				HttpPostSpec: cnsbench.HttpPost{
@@ -200,8 +201,10 @@ func (r *BenchmarkReconciler) addDefaultOutputs(instance *cnsbench.Benchmark) {
 				},
 			}
 			instance.Spec.Outputs = append(instance.Spec.Outputs, newOutput)
+			updated = true
 		}
 	}
+	return updated
 }
 
 func (r *BenchmarkReconciler) updateInstanceStatus(instance *cnsbench.Benchmark) error {
@@ -220,6 +223,14 @@ func (r *BenchmarkReconciler) updateInstance(instance *cnsbench.Benchmark) error
 		return err
 	}
 	return nil
+}
+
+// Make changes to spec as needed, returns true if the spec was changed
+// Right now this is only used to add the default output specs.  If possible,
+// other defaults should be set via kubebuilder annotations in benchmark_types.go
+// rather than relying on this function to set them.
+func (r *BenchmarkReconciler) fixupSpec(instance *cnsbench.Benchmark) bool {
+	return r.addDefaultOutputs(instance)
 }
 
 func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Request) (ctrl.Result, error) {
@@ -249,15 +260,12 @@ func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 			r.Log.Info("Deleted from r.state", "", instance.ObjectMeta.Name)
 		}
 		return ctrl.Result{}, nil
-	}
-
-	// If we're Complete but not deleted yet, nothing to do but return
-	if instance.Status.State == cnsbench.Complete {
+	} else if instance.Status.State == cnsbench.Complete {
+		// If we're Complete but not deleted yet, nothing to do but return
 		return ctrl.Result{}, nil
-	}
+	} else if instance.Status.State == cnsbench.Running {
+		// if we're here, then we're either still running or haven't started yet
 
-	// if we're here, then we're either still running or haven't started yet
-	if instance.Status.State == cnsbench.Running {
 		// If we're running, and there's a runtime set, check if we've reached the runtime
 		// And if not, check that we still have the correct number of workload instances running.
 		runtimeEnd := time.Now()
@@ -344,21 +352,24 @@ func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		// keep going
 		r.Log.Info("", "", instance.Spec)
 
-		r.addDefaultOutputs(instance)
+		if r.fixupSpec(instance) {
+			if err := r.updateInstance(instance); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true}, nil
+		}
 
+		instance.Status.RunningWorkloads = 0
+		instance.Status.State = cnsbench.Initializing
+		instance.Status.Conditions = []cnsbench.BenchmarkCondition{{LastTransitionTime: metav1.Now(), Status: "False", Type: "Complete"}}
+
+		// Create volumes, start workloads.  Rates will be started after workloads
+		// are done initialization
 		r.createVolumes(instance, instance.Spec.Volumes)
 		if err = r.startWorkloads(instance, instance.Spec.Workloads); err != nil {
 			return ctrl.Result{}, err
 		}
-
-		// if we're here we started everything successfully
-		instance.Status.State = cnsbench.Initializing
-		instance.Status.Conditions = []cnsbench.BenchmarkCondition{{LastTransitionTime: metav1.Now(), Status: "False", Type: "Complete"}}
-
 		if err := r.updateInstanceStatus(instance); err != nil {
-			return ctrl.Result{}, err
-		}
-		if err := r.updateInstance(instance); err != nil {
 			return ctrl.Result{}, err
 		}
 

@@ -17,11 +17,10 @@ type OutputStruct struct {
 
 func doOutput(outputs []cnsbench.Output, reader *bytes.Reader, outputName, benchmarkName string) {
 	for _, out := range outputs {
-		fmt.Println(out)
-		fmt.Println(outputName)
 		if out.Name == outputName {
 			if out.HttpPostSpec.URL != "" {
-				if err := HttpPost(reader, out.HttpPostSpec.URL+"/"+benchmarkName+"/"); err != nil {
+				fmt.Println("Doing output", out.HttpPostSpec.URL+"/"+benchmarkName)
+				if err := HttpPost(reader, out.HttpPostSpec.URL+"/"+benchmarkName); err != nil {
 					fmt.Println(err)
 					return
 				}
