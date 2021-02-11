@@ -197,7 +197,7 @@ func (r *BenchmarkReconciler) addDefaultOutputs(instance *cnsbench.Benchmark) bo
 			newOutput := cnsbench.Output{
 				Name: outputName,
 				HttpPostSpec: cnsbench.HttpPost{
-					URL: "http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/" + endpoint + "/",
+					URL: "http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/" + endpoint,
 				},
 			}
 			instance.Spec.Outputs = append(instance.Spec.Outputs, newOutput)
