@@ -372,6 +372,9 @@ func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		if err := r.updateInstanceStatus(instance); err != nil {
 			return ctrl.Result{}, err
 		}
+		if err := r.updateInstance(instance); err != nil {
+			return ctrl.Result{}, err
+		}
 
 		// Want to check right away if we're done initializing so requeue
 		return ctrl.Result{Requeue: true}, nil
