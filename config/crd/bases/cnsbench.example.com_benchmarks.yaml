@@ -36,9 +36,6 @@ spec:
           spec:
             description: BenchmarkSpec defines the desired state of Benchmark
             properties:
-              allWorkloadOutput:
-                nullable: true
-                type: string
               controlOperations:
                 items:
                   properties:
@@ -96,6 +93,7 @@ spec:
                     name:
                       type: string
                     outputs:
+                      nullable: true
                       properties:
                         outputName:
                           type: string
@@ -143,8 +141,13 @@ spec:
                 nullable: true
                 type: array
               metadataOutput:
+                default: defaultMetadataOutput
                 description: Output sink for the benchmark metadata, e.g. the spec
                   and start and completion times
+                nullable: true
+                type: string
+              metricsOutput:
+                default: defaultMetricsOutput
                 nullable: true
                 type: string
               outputs:
@@ -162,6 +165,7 @@ spec:
                   required:
                   - name
                   type: object
+                nullable: true
                 type: array
               rates:
                 items:
@@ -197,6 +201,7 @@ spec:
                 nullable: true
                 type: array
               runtime:
+                nullable: true
                 type: string
               volumes:
                 items:
@@ -206,6 +211,7 @@ spec:
                     should provide the name of a Volume as the value.
                   properties:
                     count:
+                      default: 1
                       nullable: true
                       type: integer
                     name:
@@ -350,6 +356,7 @@ spec:
                 items:
                   properties:
                     count:
+                      default: 1
                       nullable: true
                       type: integer
                     name:
@@ -362,17 +369,17 @@ spec:
                               inside the workload container
                             type: string
                           parser:
+                            default: null-parser
                             description: Name of parser configmap.  Defaults to the
                               null-parser if not specified, which is a no-op.
                             nullable: true
                             type: string
                           sink:
-                            description: Name of output where the parsed file should
-                              be sent.  If not specifie, defaults to the "AllResultsOutput"
-                              setting.  It's an error if neither are set.
+                            default: defaultWorkloadsOutput
                             nullable: true
                             type: string
                           target:
+                            default: workload
                             description: If there are multiple resources created by
                               the workload (e.g., client and server), target specifies
                               which resource this is referring to.  See the workload
@@ -404,6 +411,10 @@ spec:
                   type: object
                 nullable: true
                 type: array
+              workloadsOutput:
+                default: defaultWorkloadsOutput
+                nullable: true
+                type: string
             type: object
           status:
             description: BenchmarkStatus defines the observed state of Benchmark

@@ -90,6 +90,7 @@ type OutputFile struct {
 	// which is a no-op.
 	// +optional
 	// +nullable
+	// +kubebuilder:default:=null-parser
 	Parser string `json:"parser"`
 
 	// If there are multiple resources created by the workload (e.g., client and
@@ -98,13 +99,12 @@ type OutputFile struct {
 	// is specified, defaults to "workload"
 	// +optional
 	// +nullable
+	// +kubebuilder:default:=workload
 	Target string `json:"target"`
 
-	// Name of output where the parsed file should be sent.  If not specifie,
-	// defaults to the "AllResultsOutput" setting.  It's an error if neither are
-	// set.
 	// +optional
 	// +nullable
+	// +kubebuilder:default:=defaultWorkloadsOutput
 	Sink string `json:"sink"`
 }
 
@@ -117,6 +117,7 @@ type Volume struct {
 
 	// +optional
 	// +nullable
+	// +kubebuilder:default:=1
 	Count int `json:"count"`
 
 	Spec corev1.PersistentVolumeClaimSpec `json:"spec"`
@@ -137,6 +138,7 @@ type Workload struct {
 
 	// +optional
 	// +nullable
+	// +kubebuilder:default:=1
 	Count int `json:"count"`
 
 	// +optional
@@ -168,6 +170,7 @@ type ControlOperation struct {
 	DeleteSpec Delete `json:"deleteSpec"`
 
 	// +optional
+	// +nullable
 	Outputs ActionOutput `json:"outputs"`
 
 	// +optional
@@ -178,6 +181,7 @@ type ControlOperation struct {
 // BenchmarkSpec defines the desired state of Benchmark
 type BenchmarkSpec struct {
 	// +optional
+	// +nullable
 	Runtime string `json:"runtime"`
 
 	// +optional
@@ -198,15 +202,23 @@ type BenchmarkSpec struct {
 
 	// +optional
 	// +nullable
-	AllWorkloadOutput string `json:"allWorkloadOutput"`
+	// +kubebuilder:default:=defaultWorkloadsOutput
+	WorkloadsOutput string `json:"workloadsOutput"`
 
 	// Output sink for the benchmark metadata, e.g. the spec and
 	// start and completion times
 	// +optional
 	// +nullable
+	// +kubebuilder:default:=defaultMetadataOutput
 	MetadataOutput string `json:"metadataOutput"`
 
 	// +optional
+	// +nullable
+	// +kubebuilder:default:=defaultMetricsOutput
+	MetricsOutput string `json:"metricsOutput"`
+
+	// +optional
+	// +nullable
 	Outputs []Output `json:"outputs"`
 }
 

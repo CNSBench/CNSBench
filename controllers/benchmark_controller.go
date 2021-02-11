@@ -63,7 +63,7 @@ type BenchmarkReconciler struct {
 
 func (r *BenchmarkReconciler) metric(instance *cnsbench.Benchmark, metricType string, metrics ...string) {
 	metrics = append([]string{"type", metricType}, metrics...)
-	output.Metric(instance.Spec.Outputs, instance.Spec.MetadataOutput, instance.ObjectMeta.Name, metrics...)
+	output.Metric(instance.Spec.Outputs, instance.Spec.MetricsOutput, instance.ObjectMeta.Name, metrics...)
 }
 
 func (r *BenchmarkReconciler) cleanup(instance *cnsbench.Benchmark) error {
@@ -178,6 +178,32 @@ func (r *BenchmarkReconciler) getCompletedPods(workloads []cnsbench.Workload, en
 	return complete, nil
 }
 
+func (r *BenchmarkReconciler) addDefaultOutputs(instance *cnsbench.Benchmark) {
+	endpoints := map[string]string{
+		"defaultWorkloadsOutput": "workloads",
+		"defaultMetadataOutput":  "metadata",
+		"defaultMetricsOutput":   "metrics",
+	}
+
+	for outputName, endpoint := range endpoints {
+		found := false
+		for _, o := range instance.Spec.Outputs {
+			if o.Name == outputName {
+				found = true
+			}
+		}
+		if !found {
+			newOutput := cnsbench.Output{
+				Name: outputName,
+				HttpPostSpec: cnsbench.HttpPost{
+					URL: "http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/" + endpoint + "/",
+				},
+			}
+			instance.Spec.Outputs = append(instance.Spec.Outputs, newOutput)
+		}
+	}
+}
+
 func (r *BenchmarkReconciler) updateInstanceStatus(instance *cnsbench.Benchmark) error {
 	if err := r.Client.Status().Update(context.TODO(), instance); err != nil {
 		r.Log.Error(err, "Updating instance")
@@ -228,12 +254,6 @@ func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 	// If we're Complete but not deleted yet, nothing to do but return
 	if instance.Status.State == cnsbench.Complete {
 		return ctrl.Result{}, nil
-	}
-
-	// Outputs aren't required, but if the user creates a Benchmark without any and then
-	// we try to update the instance with Outputs == nil we get an error?
-	if instance.Spec.Outputs == nil {
-		instance.Spec.Outputs = []cnsbench.Output{}
 	}
 
 	// if we're here, then we're either still running or haven't started yet
@@ -323,6 +343,8 @@ func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		// them to via the control channel - i.e., even if they encounter errors they just
 		// keep going
 		r.Log.Info("", "", instance.Spec)
+
+		r.addDefaultOutputs(instance)
 
 		r.createVolumes(instance, instance.Spec.Volumes)
 		if err = r.startWorkloads(instance, instance.Spec.Workloads); err != nil {

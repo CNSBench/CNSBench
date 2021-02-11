@@ -79,19 +79,12 @@ func (r *BenchmarkReconciler) createObj(bm *cnsbench.Benchmark, obj client.Objec
 }
 
 func (r *BenchmarkReconciler) CreateVolume(bm *cnsbench.Benchmark, vol cnsbench.Volume) {
-	var count int
-	if vol.Count == 0 {
-		count = 1
-	} else {
-		count = vol.Count
-	}
-
 	// XXX This might be called because a rate fired, in which case there might
 	// already be a volume - need to check what the last volume number is and
 	// count from <last vol> to count+<last vol>
-	for c := 0; c < count; c++ {
+	for c := 0; c < vol.Count; c++ {
 		name := vol.Name
-		if count > 1 {
+		if vol.Count > 1 {
 			name += "-" + strconv.Itoa(c)
 		}
 		pvc := corev1.PersistentVolumeClaim{
@@ -109,24 +102,6 @@ func (r *BenchmarkReconciler) CreateVolume(bm *cnsbench.Benchmark, vol cnsbench.
 			r.Log.Error(err, "Creating volume")
 		}
 	}
-}
-
-func (r *BenchmarkReconciler) RunInstance(bm *cnsbench.Benchmark, cm *corev1.ConfigMap, instanceNum int, workload cnsbench.Workload) error {
-	/*
-		for k := range cm.Data {
-			// check if duplicate=true label set on object, if so run it
-			continue
-
-				if !utils.Contains(multipleInstanceObjs, k) {
-					r.Log.Info("Continuing")
-					continue
-				}
-			//if err := r.prepareAndRun(bm, instanceNum, k, workload.Name, workload, cm, []byte(cm.Data[k])); err != nil {
-			//	return err
-			//}
-		}*/
-
-	return nil
 }
 
 func (r *BenchmarkReconciler) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Workload, workloadName string) error {
@@ -153,14 +128,7 @@ func (r *BenchmarkReconciler) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Wor
 			continue
 		}
 
-		var count int
-		if a.Count == 0 {
-			count = 1
-		} else {
-			count = a.Count
-		}
-
-		for w := 0; w < count; w++ {
+		for w := 0; w < a.Count; w++ {
 			if err := r.prepareAndRun(bm, w, workloadName, a, cm, []byte(cm.Data[k])); err != nil {
 				return err
 			}
@@ -305,21 +273,13 @@ func (r *BenchmarkReconciler) ReconcileInstances(bm *cnsbench.Benchmark, workloa
 	for _, a := range workloads {
 		fmt.Println(a)
 
-		// XXX This should be fixed by updating the BM resource if count is not set to be 1
-		var count int
-		if a.Count == 0 {
-			count = 1
-		} else {
-			count = a.Count
-		}
-
 		// Check how many workloads are complete and how many exist (running or otherwise) but aren't complete
 		workloadsNeeded := 0
 		var workloadsComplete, workloadsNotComplete int
 		if workloadsComplete, workloadsNotComplete, err = CountCompletions(r.Client, a.Name); err != nil {
 			return err
 		} else {
-			workloadsNeeded = count - workloadsNotComplete
+			workloadsNeeded = a.Count - workloadsNotComplete
 		}
 		if workloadsNeeded <= 0 {
 			continue
@@ -335,7 +295,7 @@ func (r *BenchmarkReconciler) ReconcileInstances(bm *cnsbench.Benchmark, workloa
 			// We need to decode the configmap to get the workload object's annotations
 			// But we won't actually use the decoded yaml to instantiate anything, so
 			// just use "0" for the workload number
-			cmString := r.replaceVars(cm.Data[k], a, 0, count, a.Name, cm)
+			cmString := r.replaceVars(cm.Data[k], a, 0, a.Count, a.Name, cm)
 			if obj, err := r.decodeConfigMap(cmString); err != nil {
 				return err
 			} else {
@@ -347,7 +307,7 @@ func (r *BenchmarkReconciler) ReconcileInstances(bm *cnsbench.Benchmark, workloa
 				}
 			}
 
-			for w := workloadsComplete + workloadsNotComplete; w < workloadsComplete+count; w++ {
+			for w := workloadsComplete + workloadsNotComplete; w < workloadsComplete+a.Count; w++ {
 				if err := r.prepareAndRun(bm, w, a.Name, a, cm, []byte(cm.Data[k])); err != nil {
 					return err
 				}

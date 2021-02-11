@@ -16,21 +16,14 @@ type OutputStruct struct {
 }
 
 func doOutput(outputs []cnsbench.Output, reader *bytes.Reader, outputName, benchmarkName string) {
-	if outputName == "" {
-		if err := HttpPost(reader, "http://cnsbench-output-collector.cnsbench-system.svc.cluster.local:8888/metadata/"+benchmarkName); err != nil {
-			fmt.Println(err)
-			return
-		}
-	} else {
-		for _, out := range outputs {
-			fmt.Println(out)
-			fmt.Println(outputName)
-			if out.Name == outputName {
-				if out.HttpPostSpec.URL != "" {
-					if err := HttpPost(reader, out.HttpPostSpec.URL); err != nil {
-						fmt.Println(err)
-						return
-					}
+	for _, out := range outputs {
+		fmt.Println(out)
+		fmt.Println(outputName)
+		if out.Name == outputName {
+			if out.HttpPostSpec.URL != "" {
+				if err := HttpPost(reader, out.HttpPostSpec.URL+"/"+benchmarkName+"/"); err != nil {
+					fmt.Println(err)
+					return
 				}
 			}
 		}
