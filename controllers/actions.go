@@ -144,7 +144,7 @@ func (r *BenchmarkReconciler) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Wor
 		if !strings.Contains(k, "parse") {
 			continue
 		}
-		if err := r.prepareAndRun(bm, 0, k, workloadName, a, cm, []byte(cm.Data[k])); err != nil {
+		if err := r.prepareAndRun(bm, 0, workloadName, a, cm, []byte(cm.Data[k])); err != nil {
 			return err
 		}
 	}
@@ -161,7 +161,7 @@ func (r *BenchmarkReconciler) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Wor
 		}
 
 		for w := 0; w < count; w++ {
-			if err := r.prepareAndRun(bm, w, k, workloadName, a, cm, []byte(cm.Data[k])); err != nil {
+			if err := r.prepareAndRun(bm, w, workloadName, a, cm, []byte(cm.Data[k])); err != nil {
 				return err
 			}
 		}
@@ -297,47 +297,63 @@ func (r *BenchmarkReconciler) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale)
 	return err
 }
 
-func (r *BenchmarkReconciler) ReconcileInstances(bm *cnsbench.Benchmark, c client.Client, workloads []cnsbench.Workload) error {
+func (r *BenchmarkReconciler) ReconcileInstances(bm *cnsbench.Benchmark, workloads []cnsbench.Workload) error {
+	var err error
 	cm := &corev1.ConfigMap{}
+	accessor := meta.NewAccessor()
 
 	for _, a := range workloads {
 		fmt.Println(a)
 
+		// XXX This should be fixed by updating the BM resource if count is not set to be 1
+		var count int
+		if a.Count == 0 {
+			count = 1
+		} else {
+			count = a.Count
+		}
+
+		// Check how many workloads are complete and how many exist (running or otherwise) but aren't complete
+		workloadsNeeded := 0
+		var workloadsComplete, workloadsNotComplete int
+		if workloadsComplete, workloadsNotComplete, err = CountCompletions(r.Client, a.Name); err != nil {
+			return err
+		} else {
+			workloadsNeeded = count - workloadsNotComplete
+		}
+		if workloadsNeeded <= 0 {
+			continue
+		}
+		r.Log.Info("ReconcileInstances", "Workloads needed", workloadsNeeded, "complete", workloadsComplete, "not complete", workloadsNotComplete)
+
+		// Fewer non-complete workloads exist than "count", so need to create more workload instances
 		if err := r.Client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: LIBRARY_NAMESPACE}, cm); err != nil {
 			return err
 		}
 
-		// Iterate through each object in the workload spec, if it has "duplicate=true" annotation
-		// then check how many instances are running
-		ls := &metav1.LabelSelector{}
-		ls = metav1.AddLabelToSelector(ls, "workloadname", a.Name)
-		ls = metav1.AddLabelToSelector(ls, "duplicate", "true")
-
-		selector, err := metav1.LabelSelectorAsSelector(ls)
-		if err != nil {
-			return err
-		}
-		pods := &corev1.PodList{}
-		if err := c.List(context.TODO(), pods, &client.ListOptions{Namespace: "default", LabelSelector: selector}); err != nil {
-			return err
-		}
-
-		incomplete := 0
-		for _, pod := range pods.Items {
-			fmt.Println(pod.Name, pod.Status.Phase)
-			if pod.Status.Phase != "Succeeded" {
-				incomplete += 1
+		for k := range cm.Data {
+			// We need to decode the configmap to get the workload object's annotations
+			// But we won't actually use the decoded yaml to instantiate anything, so
+			// just use "0" for the workload number
+			cmString := r.replaceVars(cm.Data[k], a, 0, count, a.Name, cm)
+			if obj, err := r.decodeConfigMap(cmString); err != nil {
+				return err
+			} else {
+				// Only create a new instance of this workload if it's "duplicate" annotation is "true"
+				if objAnnotations, err := accessor.Annotations(obj); err != nil {
+					return err
+				} else if duplicate, exists := objAnnotations["duplicate"]; !exists || duplicate != "true" {
+					continue
+				}
 			}
-		}
 
-		if incomplete < a.Count {
-			fmt.Println("Need new instances", a.Count, incomplete)
-			for n := 0; n < a.Count-incomplete; n++ {
-				if err := r.RunInstance(bm, cm, len(pods.Items)+1+n, a); err != nil {
+			for w := workloadsComplete + workloadsNotComplete; w < workloadsComplete+count; w++ {
+				if err := r.prepareAndRun(bm, w, a.Name, a, cm, []byte(cm.Data[k])); err != nil {
 					return err
 				}
 			}
 		}
+
 	}
 
 	return nil

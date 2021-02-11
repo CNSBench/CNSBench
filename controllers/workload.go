@@ -524,7 +524,7 @@ func (r *BenchmarkReconciler) addCNSBLabels(workloadSpec cnsbench.Workload, obj 
 	return obj, err
 }
 
-func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, k string, workloadName string, a cnsbench.Workload, cm *corev1.ConfigMap, objBytes []byte) error {
+func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, workloadName string, a cnsbench.Workload, cm *corev1.ConfigMap, objBytes []byte) error {
 	var err error
 	var obj client.Object
 	var objAnnotations map[string]string

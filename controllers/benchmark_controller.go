@@ -243,26 +243,29 @@ func (r *BenchmarkReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		runtimeEnd := time.Now()
 		if instance.Spec.Runtime != "" && time.Now().Before(instance.Status.TargetCompletionTime.Time) {
 			r.Log.Info("Before target completion time", "completion time", instance.Status.TargetCompletionTime, "now", time.Now().Unix())
+			err = r.ReconcileInstances(instance, instance.Spec.Workloads)
 			return ctrl.Result{}, err
-		}
-
-		// If we're running and there's no runtime set, check if the workloads are complete
-		r.Log.Info("Checking status...")
-		complete := true
-		for _, w := range instance.Spec.Workloads {
-			workloadComplete, err := CheckCompletion(r.Client, w.Name)
-			if err != nil {
-				r.Log.Error(err, "Error checking Job status")
+		} else if instance.Spec.Runtime == "" {
+			// If we're running and there's no runtime set, check if the workloads are complete
+			r.Log.Info("Checking status...")
+			complete := true
+			for _, w := range instance.Spec.Workloads {
+				workloadsComplete, _, err := CountCompletions(r.Client, w.Name)
+				if err != nil {
+					r.Log.Error(err, "Error checking Job status")
+					return ctrl.Result{}, err
+				} else if workloadsComplete < w.Count {
+					complete = false
+					break
+				}
+			}
+			// No runtime set, not complete, just return
+			if !complete {
 				return ctrl.Result{}, err
-			} else if !workloadComplete {
-				complete = false
-				break
 			}
 		}
-		if !complete {
-			return ctrl.Result{}, err
-		}
 
+		// Either runtime is set and we've reached it, or it's not set but all workloads are complete:
 		r.Log.Info("Pods are complete, doing outputs")
 		instance.Status.NumCompletedObjs, _ = r.getCompletedPods(instance.Spec.Workloads, runtimeEnd)
 		r.doOutputs(instance, instance.ObjectMeta.CreationTimestamp.Unix(), time.Now().Unix(), instance.Status.InitCompletionTimeUnix)
