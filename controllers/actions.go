@@ -106,10 +106,9 @@ func (r *BenchmarkReconciler) CreateVolume(bm *cnsbench.Benchmark, vol cnsbench.
 
 func (r *BenchmarkReconciler) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Workload, workloadName string) error {
 	cm := &corev1.ConfigMap{}
-
 	err := r.Client.Get(context.TODO(), client.ObjectKey{Name: a.Workload, Namespace: LIBRARY_NAMESPACE}, cm)
 	if err != nil {
-		r.Log.Error(err, "Error getting ConfigMap", "spec", a.Workload)
+		r.Log.Error(err, "Error getting ConfigMap", a.Workload)
 		return err
 	}
 
@@ -212,8 +211,35 @@ func (r *BenchmarkReconciler) DeleteObj(bm *cnsbench.Benchmark, d cnsbench.Delet
 	return nil
 }
 
-func (r *BenchmarkReconciler) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale) error {
-	var err error
+func (r *BenchmarkReconciler) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale, numReplicas int) error {
+	// For now, the way this works is: a configmap in the library namespace
+	// contains scripts for scaling up/down an object.  In a Scale control
+	// op spec, the user specifies the name of the object they want to
+	// scale and the name of this configmap in the library.  We clone the
+	// configmap in to the default namespace, create a pod that attaches
+	// that configmap, and run the scale script in that pod.
+	//
+	// Once we are able to include more complicated objects (i.e.,
+	// non-default resource types) in a workload, then we will add a field
+	// to the Scale spec that references a Workload in the Benchmark (like
+	// the WorkloadName field of a Snapshot control op spec).  That will
+	// let us lookup the target object (so the user doesn't need to specify
+	// the actual name of the object to be scaled), and the workload spec
+	// should include the scale scripts so we can look those up as well.
+	//
+	// Summary: Currently, a user must supply both the name of the object
+	// to be scaled and the name of a configmap in the library namespace
+	// that has scripts for scaling that object.  In the future, they will
+	// be able to instead just supply the name of a workload that CNSBench
+	// has already instantiated, and CNSBench will be able to lookup both
+	// the scale scripts and the target object from that alone.
+
+	// TODO: Check to see if a copy of the scale script configmap already
+	// exists, use that if so.
+	scriptsCMName, err := r.cloneParser(bm, s.ScaleScripts)
+	if err != nil {
+		return err
+	}
 
 	name := names.NameGenerator.GenerateName(names.SimpleNameGenerator, "scale-pod-")
 	scalePod := &corev1.Pod{
@@ -225,12 +251,13 @@ func (r *BenchmarkReconciler) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale)
 			},
 		},
 		Spec: corev1.PodSpec{
-			RestartPolicy: "Never",
+			RestartPolicy:      "Never",
+			ServiceAccountName: s.ServiceAccountName,
 			Containers: []corev1.Container{
 				{
 					Name:    "scale-container",
-					Image:   "localcontainerrepo:5000/cnsb/kubectl",
-					Command: []string{"/scripts/scaleup.sh", s.ObjName},
+					Image:   "cnsbench/kubectl-container",
+					Command: []string{"/scripts/scale.sh", s.ObjName, strconv.Itoa(numReplicas)},
 					VolumeMounts: []corev1.VolumeMount{
 						{
 							MountPath: "/scripts/",
@@ -243,7 +270,7 @@ func (r *BenchmarkReconciler) ScaleObj(bm *cnsbench.Benchmark, s cnsbench.Scale)
 	}
 	scaleScriptCM := corev1.ConfigMapVolumeSource{}
 	scaleScriptCM.DefaultMode = utilptr.Int32Ptr(0777)
-	scaleScriptCM.Name = s.ScriptConfigMap
+	scaleScriptCM.Name = scriptsCMName
 	scaleScriptVol := corev1.Volume{}
 	scaleScriptVol.Name = "scale-script"
 	scaleScriptVol.ConfigMap = &scaleScriptCM

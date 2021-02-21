@@ -87,12 +87,18 @@ spec:
                       nullable: true
                       properties:
                         objName:
+                          nullable: true
                           type: string
-                        scriptConfigMap:
+                        scaleScripts:
+                          nullable: true
+                          type: string
+                        serviceAccountName:
+                          type: string
+                        workloadName:
+                          nullable: true
                           type: string
                       required:
-                      - objName
-                      - scriptConfigMap
+                      - serviceAccountName
                       type: object
                     snapshotSpec:
                       description: Snapshots and deletions can operate on an individual object or a selector if a selector, then there may be multiple objects that match - should specify different policies for deciding which object to delete, e.g. "newest", "oldest", "random", ???
@@ -520,12 +526,18 @@ spec:
                       nullable: true
                       properties:
                         objName:
+                          nullable: true
                           type: string
-                        scriptConfigMap:
+                        scaleScripts:
+                          nullable: true
+                          type: string
+                        serviceAccountName:
+                          type: string
+                        workloadName:
+                          nullable: true
                           type: string
                       required:
-                      - objName
-                      - scriptConfigMap
+                      - serviceAccountName
                       type: object
                     snapshotSpec:
                       description: Snapshots and deletions can operate on an individual object or a selector if a selector, then there may be multiple objects that match - should specify different policies for deciding which object to delete, e.g. "newest", "oldest", "random", ???

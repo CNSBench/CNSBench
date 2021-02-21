@@ -427,7 +427,7 @@ func (r *BenchmarkReconciler) runControlOps(bm *cnsbench.Benchmark, rateCh chan 
 			}
 			for _, a := range bm.Spec.ControlOperations {
 				if a.RateName == rateName {
-					if err := r.runControlOp(bm, a); err != nil {
+					if err := r.runControlOp(bm, a, n); err != nil {
 						r.Log.Error(err, "Error running action")
 					}
 				}
@@ -436,7 +436,7 @@ func (r *BenchmarkReconciler) runControlOps(bm *cnsbench.Benchmark, rateCh chan 
 	}
 }
 
-func (r *BenchmarkReconciler) runControlOp(bm *cnsbench.Benchmark, a cnsbench.ControlOperation) error {
+func (r *BenchmarkReconciler) runControlOp(bm *cnsbench.Benchmark, a cnsbench.ControlOperation, rateCounter int) error {
 	r.Log.Info("Running action", "name", a, "deletespec", metav1.FormatLabelSelector(&a.DeleteSpec.Selector))
 	if a.SnapshotSpec.SnapshotClass != "" {
 		return r.CreateSnapshot(bm, a.SnapshotSpec, a.Name)
@@ -444,7 +444,7 @@ func (r *BenchmarkReconciler) runControlOp(bm *cnsbench.Benchmark, a cnsbench.Co
 		metav1.FormatLabelSelector(&a.DeleteSpec.Selector) != "<none>" {
 		return r.DeleteObj(bm, a.DeleteSpec)
 	} else if a.ScaleSpec.ObjName != "" {
-		return r.ScaleObj(bm, a.ScaleSpec)
+		return r.ScaleObj(bm, a.ScaleSpec, rateCounter)
 	} else {
 		r.Log.Info("Unknown kind of action")
 	}

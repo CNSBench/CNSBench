@@ -78,8 +78,18 @@ type Delete struct {
 
 // TODO: need a way of specifying how to scale - up or down, and by how much
 type Scale struct {
-	ObjName         string `json:"objName"`
-	ScriptConfigMap string `json:"scriptConfigMap"`
+	// +optional
+	// +nullable
+	ObjName string `json:"objName"`
+	// +optional
+	// +nullable
+	ScaleScripts string `json:"scaleScripts"`
+
+	// +optional
+	// +nullable
+	WorkloadName string `json:"workloadName"`
+
+	ServiceAccountName string `json:"serviceAccountName"`
 }
 
 type OutputFile struct {
