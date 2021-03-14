@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/storage/names"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -195,16 +196,18 @@ func (r *BenchmarkReconciler) DeleteObj(bm *cnsbench.Benchmark, d cnsbench.Delet
 	if err != nil {
 		return err
 	}
-	snaps := &snapshotv1beta1.VolumeSnapshotList{}
-	if err := r.Client.List(context.TODO(), snaps, &client.ListOptions{Namespace: "default", LabelSelector: labelSelector}); err != nil {
+	objList := &unstructured.UnstructuredList{}
+	objList.SetAPIVersion(d.APIVersion)
+	objList.SetKind(d.Kind)
+	if err := r.Client.List(context.TODO(), objList, &client.ListOptions{Namespace: "default", LabelSelector: labelSelector}); err != nil {
 		return err
 	}
-	sort.Slice(snaps.Items, func(i, j int) bool {
-		return snaps.Items[i].ObjectMeta.CreationTimestamp.Unix() < snaps.Items[j].ObjectMeta.CreationTimestamp.Unix()
+	sort.Slice(objList.Items, func(i, j int) bool {
+		return objList.Items[i].GetCreationTimestamp().Unix() < objList.Items[j].GetCreationTimestamp().Unix()
 	})
-	if len(snaps.Items) > 0 {
-		r.Log.Info("Deleting first item", "name", snaps.Items[0].Name, "createtime", snaps.Items[0].ObjectMeta.CreationTimestamp.Unix())
-		return r.Client.Delete(context.TODO(), &snaps.Items[0])
+	if len(objList.Items) > 0 {
+		r.Log.Info("Deleting first item", "name", objList.Items[0].GetName(), "createtime", objList.Items[0].GetCreationTimestamp().Unix())
+		return r.Client.Delete(context.TODO(), &objList.Items[0])
 	}
 	r.Log.Info("No objects found")
 

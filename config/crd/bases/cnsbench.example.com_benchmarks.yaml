@@ -42,8 +42,15 @@ spec:
                     deleteSpec:
                       nullable: true
                       properties:
+                        apiVersion:
+                          type: string
+                        kind:
+                          type: string
                         selector:
-                          description: ObjName string `json:"objName"`
+                          description: A label selector is a label query over a set
+                            of resources. The result of matchLabels and matchExpressions
+                            are ANDed. An empty label selector matches all objects.
+                            A null label selector matches no objects.
                           properties:
                             matchExpressions:
                               description: matchExpressions is a list of label selector
@@ -88,6 +95,8 @@ spec:
                               type: object
                           type: object
                       required:
+                      - apiVersion
+                      - kind
                       - selector
                       type: object
                     name:
