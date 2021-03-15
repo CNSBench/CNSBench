@@ -548,6 +548,9 @@ func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, workl
 		if obj, err = r.addSyncContainer(bm, obj, a.Count, workloadName, a.SyncGroup); err != nil {
 			return err
 		}
+		if obj, err = r.addPodWatcherToken(obj); err != nil {
+			return err
+		}
 	}
 
 	// Ownership can't transcend namespaces
@@ -598,11 +601,6 @@ func (r *BenchmarkReconciler) addSyncContainer(bm *cnsbench.Benchmark, obj clien
 		},
 	}
 	spec.InitContainers = append(spec.InitContainers, c)
-
-	// Add volume for the token that allows helper containers to query api server
-	if obj, err = r.addPodWatcherToken(obj); err != nil {
-		return obj, err
-	}
 
 	if cmName, err := r.createTmpConfigMapFromDisk(bm, "ready.sh"); err != nil {
 		return obj, err
