@@ -361,6 +361,27 @@ func (r *BenchmarkReconciler) addPodWatcherToken(obj client.Object) (client.Obje
 
 //////////////////////////////////////////////////////////
 
+func (r *BenchmarkReconciler) prependWorkloadContainerCmd(obj client.Object) (client.Object, error) {
+	// get PodSpec
+	spec, err := podutils.PodSpec(obj)
+	if err != nil {
+		r.Log.Error(err, "podSpec")
+		return nil, err
+	}
+
+	// iterate through containers and update command
+	for _, container := range spec.Containers {
+		var script []string = []string {"/bin/sh", "-c"}
+		cmd := strings.Join(container.Command, " ")
+		script = append(script, cmd)
+		container.Command = script
+	}
+
+	return podutils.UpdatePodSpec(obj, *spec)
+}
+
+//////////////////////////////////////////////////////////
+
 func (r *BenchmarkReconciler) replaceVars(cmString string, workloadSpec cnsbench.Workload, instanceNum, numInstances int, workloadName string, workloadConfigMap *corev1.ConfigMap) string {
 	for variable, value := range workloadSpec.Vars {
 		r.Log.Info("Searching for var", "var", variable, "replacement", value)
@@ -527,6 +548,11 @@ func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, workl
 	if r.getRole(objAnnotations) == "volume" && nonDefaultVolBool {
 		r.Log.Info("This is volume but non default volume name supplied, skipping")
 		return nil
+	}
+
+	// Prepare worload container commands
+	if obj, err = r.prependWorkloadContainerCmd(obj); err != nil {
+		return err
 	}
 
 	// Add containers for parsing and outputting
