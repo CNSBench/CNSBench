@@ -370,11 +370,11 @@ func (r *BenchmarkReconciler) prependWorkloadContainerCmd(obj client.Object) (cl
 	}
 
 	// iterate through containers and update command
-	for _, container := range spec.Containers {
-		var script []string = []string {"/bin/sh", "-c"}
+	for i, container := range spec.Containers {
+		var script []string = []string{"/bin/sh", "-c"}
 		cmd := strings.Join(container.Command, " ")
 		script = append(script, cmd)
-		container.Command = script
+		spec.Containers[i].Command = script
 	}
 
 	return podutils.UpdatePodSpec(obj, *spec)
@@ -550,9 +550,11 @@ func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, workl
 		return nil
 	}
 
-	// Prepare worload container commands
-	if obj, err = r.prependWorkloadContainerCmd(obj); err != nil {
-		return err
+	// Prepare worload container commands, if pod spec present
+	if r.getRole(objAnnotations) == "workload" {
+		if obj, err = r.prependWorkloadContainerCmd(obj); err != nil {
+			return err
+		}
 	}
 
 	// Add containers for parsing and outputting
