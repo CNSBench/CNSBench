@@ -18,9 +18,11 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/storage/names"
+	"k8s.io/client-go/discovery"
 	"k8s.io/client-go/kubernetes/scheme"
 	utilptr "k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -200,18 +202,29 @@ func (r *BenchmarkReconciler) DeleteObj(bm *cnsbench.Benchmark, d cnsbench.Delet
 	if err != nil {
 		return err
 	}
-	objList := &unstructured.UnstructuredList{}
-	objList.SetAPIVersion(d.APIVersion)
-	objList.SetKind(d.Kind)
-	if err := r.Client.List(context.TODO(), objList, &client.ListOptions{Namespace: "default", LabelSelector: labelSelector}); err != nil {
-		return err
+
+	discoveryCl := discovery.NewDiscoveryClientForConfigOrDie(config.GetConfigOrDie())
+	apiResourceLists, err := discoveryCl.ServerPreferredResources()
+	if err != nil {
+		fmt.Println(err)
 	}
-	sort.Slice(objList.Items, func(i, j int) bool {
-		return objList.Items[i].GetCreationTimestamp().Unix() < objList.Items[j].GetCreationTimestamp().Unix()
-	})
-	if len(objList.Items) > 0 {
-		r.Log.Info("Deleting first item", "name", objList.Items[0].GetName(), "createtime", objList.Items[0].GetCreationTimestamp().Unix())
-		return r.Client.Delete(context.TODO(), &objList.Items[0])
+
+	for _, apiResourceList := range apiResourceLists {
+		for _, apiResource := range apiResourceList.APIResources {
+			objList := &unstructured.UnstructuredList{}
+			objList.SetAPIVersion(apiResourceList.GroupVersion)
+			objList.SetKind(apiResource.Kind)
+			if err := r.Client.List(context.TODO(), objList, &client.ListOptions{Namespace: "default", LabelSelector: labelSelector}); err != nil {
+				return err
+			}
+			sort.Slice(objList.Items, func(i, j int) bool {
+				return objList.Items[i].GetCreationTimestamp().Unix() < objList.Items[j].GetCreationTimestamp().Unix()
+			})
+			if len(objList.Items) > 0 {
+				r.Log.Info("Deleting first item", "kind", objList.Items[0].GetKind(), "name", objList.Items[0].GetName(), "createtime", objList.Items[0].GetCreationTimestamp().Unix())
+				return r.Client.Delete(context.TODO(), &objList.Items[0])
+			}
+		}
 	}
 	r.Log.Info("No objects found")
 

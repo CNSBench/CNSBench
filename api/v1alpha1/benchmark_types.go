@@ -72,9 +72,7 @@ type Snapshot struct {
 }
 
 type Delete struct {
-	APIVersion string               `json:"apiVersion"`
-	Kind       string               `json:"kind"`
-	Selector   metav1.LabelSelector `json:"selector"`
+	Selector metav1.LabelSelector `json:"selector"`
 }
 
 // TODO: need a way of specifying how to scale - up or down, and by how much

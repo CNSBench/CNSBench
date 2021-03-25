@@ -42,10 +42,6 @@ spec:
                     deleteSpec:
                       nullable: true
                       properties:
-                        apiVersion:
-                          type: string
-                        kind:
-                          type: string
                         selector:
                           description: A label selector is a label query over a set
                             of resources. The result of matchLabels and matchExpressions
@@ -95,8 +91,6 @@ spec:
                               type: object
                           type: object
                       required:
-                      - apiVersion
-                      - kind
                       - selector
                       type: object
                     name:
