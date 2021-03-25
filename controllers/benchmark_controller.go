@@ -44,11 +44,12 @@ const LIBRARY_NAMESPACE = "cnsbench-library"
 // BenchmarkReconciler reconciles a Benchmark object
 type BenchmarkReconciler struct {
 	client.Client
-	Log             logr.Logger
-	Scheme          *runtime.Scheme
-	controlChannels map[string](chan bool)
-	controller      controller.Controller
-	ScriptsDir      string
+	Log              logr.Logger
+	Scheme           *runtime.Scheme
+	controlChannels  map[string](chan bool)
+	controller       controller.Controller
+	ScriptsDir       string
+	workloadInstance map[string]int
 }
 
 // +kubebuilder:rbac:groups=cnsbench.example.com,resources=benchmarks,verbs=get;list;watch;create;update;patch;delete
@@ -454,6 +455,7 @@ func (r *BenchmarkReconciler) runControlOp(bm *cnsbench.Benchmark, a cnsbench.Co
 // SetupWithManager sets up the controller with the Manager.
 func (r *BenchmarkReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.controlChannels = make(map[string](chan bool))
+	r.workloadInstance = make(map[string]int)
 	var err error
 	r.controller, err = ctrl.NewControllerManagedBy(mgr).
 		For(&cnsbench.Benchmark{}).

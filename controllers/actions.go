@@ -128,8 +128,12 @@ func (r *BenchmarkReconciler) RunWorkload(bm *cnsbench.Benchmark, a cnsbench.Wor
 			continue
 		}
 
+		if _, ok := r.workloadInstance[a.Workload]; !ok {
+			r.workloadInstance[a.Workload] = -1
+		}
 		for w := 0; w < a.Count; w++ {
-			if err := r.prepareAndRun(bm, w, workloadName, a, cm, []byte(cm.Data[k])); err != nil {
+			r.workloadInstance[a.Workload] += 1
+			if err := r.prepareAndRun(bm, r.workloadInstance[a.Workload], workloadName, a, cm, []byte(cm.Data[k])); err != nil {
 				return err
 			}
 		}
