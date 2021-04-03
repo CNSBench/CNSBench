@@ -1,12 +1,12 @@
-package objecttiming
+package main
 
 import "encoding/json"
 
-/* Structures to store parsing & calculation data */
+/* JSON dictionary - mainly for storing timing results */
 
 type jsondict = map[string]interface{}
 
-/* Structures to store audit log input */
+/* Structures for parsing audit log JSON input into */
 
 type auditlog = struct {
 	Stage,

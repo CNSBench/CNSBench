@@ -1,4 +1,4 @@
-package objecttiming
+package main
 
 // Flags for each action
 const (

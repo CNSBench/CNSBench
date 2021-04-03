@@ -2,7 +2,7 @@
 Helper functions needed by parsing subroutines of all actions
 */
 
-package objecttiming
+package main
 
 import "time"
 
@@ -139,8 +139,6 @@ func convertName(resource string) string {
 Takes a slice of records, formats resource names to their proper
 capitalized versions
 */
-func formatResourceNames(records []jsondict) {
-	for _, rec := range records {
-		rec["resource"] = convertName(rec["resource"].(string))
-	}
+func formatResourceName(record jsondict) {
+	record["resource"] = convertName(record["resource"].(string))
 }

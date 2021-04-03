@@ -2,7 +2,7 @@
 variables & functions related to object creation parsing
 */
 
-package objecttiming
+package main
 
 import "encoding/json"
 
