@@ -6,7 +6,7 @@
 // 	protoc        v3.13.0
 // source: https://github.com/container-storage-interface/spec/blob/master/csi.proto
 
-package csiparser
+package main
 
 import (
 	proto "github.com/golang/protobuf/proto"

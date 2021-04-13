@@ -1,4 +1,4 @@
-package csiparser
+package main
 
 import (
 	"bytes"
@@ -36,9 +36,9 @@ func extractStreams(rfs map[string]rawFrames) []rawStreams {
 }
 
 type streaminfo = struct {
-	headersEnded	bool
-	headersIndex	int
-	stream			stream
+	headersEnded bool
+	headersIndex int
+	stream       stream
 }
 
 func framesToStreams(allFrames []frames) map[uint32]stream {

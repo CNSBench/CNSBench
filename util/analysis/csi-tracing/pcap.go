@@ -1,4 +1,4 @@
-package csiparser
+package main
 
 import (
 	"log"
@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/gopacket"
-    "github.com/google/gopacket/layers"
-    "github.com/google/gopacket/pcap"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcap"
 )
 
 func parsePackets(fileName string) map[string]rawFrames {

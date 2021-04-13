@@ -1,4 +1,4 @@
-package csiparser
+package main
 
 import (
 	"net"
@@ -14,12 +14,12 @@ func parseRPCs(rawstreams []rawStreams) []CsiRPC {
 	for _, streams := range rawstreams {
 		for sid, abStrm := range streams.ab {
 			// For each pair of opposite streams with the same stream ID:
-			if baStrm, ok:= streams.ba[sid]; ok {
+			if baStrm, ok := streams.ba[sid]; ok {
 				// Figure out which is request & which is response
 				var (
 					request, response stream
-					clientIP net.IP
-					clientPort layers.TCPPort
+					clientIP          net.IP
+					clientPort        layers.TCPPort
 				)
 				if isGRPCRequest(abStrm) && isGRPCResponse(baStrm) {
 					request, response = abStrm, baStrm

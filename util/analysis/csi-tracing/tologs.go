@@ -1,4 +1,4 @@
-package csiparser
+package main
 
 import (
 	"encoding/json"
@@ -7,28 +7,28 @@ import (
 )
 
 type CsiLog struct {
-	Action			string			`json:"action"`
-	Path			string			`json:"path"`
-	Agent struct {
-		Name		string			`json:"name"`
-		Ip			string			`json:"ip"`
-		Port		string			`json:"port"`
-	}								`json:"agent"`
+	Action string `json:"action"`
+	Path   string `json:"path"`
+	Agent  struct {
+		Name string `json:"name"`
+		Ip   string `json:"ip"`
+		Port string `json:"port"`
+	} `json:"agent"`
 	Timing struct {
-		Start		time.Time		`json:"start"`
-		End			time.Time		`json:"end"`
-		Duration	time.Duration	`json:"duration"`
-	}								`json:"timing"`
-	Request			interface{}		`json:"request"`
-	Response		interface{}		`json:"response"`
+		Start    time.Time     `json:"start"`
+		End      time.Time     `json:"end"`
+		Duration time.Duration `json:"duration"`
+	} `json:"timing"`
+	Request  interface{} `json:"request"`
+	Response interface{} `json:"response"`
 }
 
-func ToJson(log CsiLog) string {
+func toJson(log CsiLog) string {
 	output, _ := json.Marshal(log)
 	return string(output)
 }
 
-func PcapToLogs(fileName string) []CsiLog {
+func pcapToLogs(fileName string) []CsiLog {
 	rpcs := parseCSIPcapFile(fileName)
 	return extractLogs(rpcs)
 }

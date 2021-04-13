@@ -1,4 +1,4 @@
-package csiparser
+package main
 
 import "sort"
 

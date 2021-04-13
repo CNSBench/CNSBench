@@ -1,4 +1,4 @@
-package csiparser
+package main
 
 import (
 	"log"
@@ -36,17 +36,17 @@ func parseCSI(csiFrame []byte, csiStruct protoiface.MessageV1) {
 }
 
 type gRPCMessage struct {
-	compressedFlag 	uint8	// first byte: 0 for not compressed, 1 for compressed
-	messageLength	uint32	// next 4 bytes: length of RPC message (CSI request/response)
-	message			[]byte	// Message
+	compressedFlag uint8  // first byte: 0 for not compressed, 1 for compressed
+	messageLength  uint32 // next 4 bytes: length of RPC message (CSI request/response)
+	message        []byte // Message
 }
 
-func parseGRPCMessage(frame []byte) (gRPCMessage) {
+func parseGRPCMessage(frame []byte) gRPCMessage {
 	// Store frame as gRPC message struct
 	msgLength := uint32(frame[1])
-	msgLength = msgLength << 8 | uint32(frame[2])
-	msgLength = msgLength << 8 | uint32(frame[3])
-	msgLength = msgLength << 8 | uint32(frame[4])
+	msgLength = msgLength<<8 | uint32(frame[2])
+	msgLength = msgLength<<8 | uint32(frame[3])
+	msgLength = msgLength<<8 | uint32(frame[4])
 	msg := gRPCMessage{uint8(frame[0]), msgLength, frame[5:]}
 	// For now, give up if msg is compressed
 	if msg.compressedFlag > 0 {
