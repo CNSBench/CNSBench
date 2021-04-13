@@ -373,8 +373,11 @@ func (r *BenchmarkReconciler) prependWorkloadContainerCmd(obj client.Object) (cl
 	for i, container := range spec.Containers {
 		script := []string{"/bin/sh", "-c"}
 		cmds := []string{"ln -s /output /var/workload;"}
+		// Get command and remove "/bin/sh -c from beginning"
 		cmd := strings.Join(container.Command, " ")
-		cmds = append(cmds, cmd)
+		strippedCmd := strings.Split(cmd, "sh -c")
+		// Prepend command and update command in container
+		cmds = append(cmds, strippedCmd[len(strippedCmd)-1])
 		finalCmd := strings.Join(cmds, " ")
 		script = append(script, finalCmd)
 		spec.Containers[i].Command = script
