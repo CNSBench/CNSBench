@@ -25,7 +25,10 @@ func main() {
 	}
 	filename := flag.Args()[0]
 
+	// Parse CsiLog entries from pcap file
 	logs := pcapToLogs(filename)
+
+	// Print each log in JSON format
 	for _, log := range logs {
 		fmt.Println(toJson(log))
 	}
