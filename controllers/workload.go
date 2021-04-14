@@ -1,6 +1,7 @@
 package controllers
 
 import (
+  "fmt"
 	"context"
 	"io/ioutil"
 	"path"
@@ -361,11 +362,11 @@ func (r *BenchmarkReconciler) addPodWatcherToken(obj client.Object) (client.Obje
 
 //////////////////////////////////////////////////////////
 
-func (r *BenchmarkReconciler) prependWorkloadContainerCmd(obj client.Object) (client.Object, error) {
+func PrependWorkloadContainerCmd(obj client.Object) (client.Object, error) {
 	// get PodSpec
 	spec, err := podutils.PodSpec(obj)
 	if err != nil {
-		r.Log.Error(err, "podSpec")
+		fmt.Println(err, "podSpec")
 		return nil, err
 	}
 
@@ -558,7 +559,7 @@ func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, workl
 
 	// Prepare worload container commands, if pod spec present
 	if r.getRole(objAnnotations) == "workload" {
-		if obj, err = r.prependWorkloadContainerCmd(obj); err != nil {
+		if obj, err = PrependWorkloadContainerCmd(obj); err != nil {
 			return err
 		}
 	}
