@@ -4,9 +4,13 @@ import (
 	"io/ioutil"
 	"log"
 	"strconv"
+	"strings"
 
 	"gopkg.in/yaml.v3"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -27,34 +31,6 @@ type WorkloadObject struct {
 
 type WorkloadObjectsArray struct {
 	WorkloadObjects []WorkloadObject `yaml:"workloadObjects"`
-}
-
-type Annotations struct {
-	Role       string `yaml:"role"`
-	Duplicate  string `yaml:"duplicate"`
-	Sync       string `yaml:"sync"`
-	OutputFile string `yaml:"outputFile"`
-	Parser     string `yaml:"parser"`
-}
-
-type Metadata struct {
-	Name        string            `yaml:"name"`
-	Namespace   string            `yaml:"namespace"`
-	Labels      map[string]string `yaml:"labels"`
-	Annotations Annotations       `yaml:"annotations"`
-}
-
-type WorkloadSpecObject struct {
-	ApiVersion string   `yaml:"apiVersion"`
-	Kind       string   `yaml:"kind"`
-	Metadata   Metadata `yaml:"metadata"`
-}
-
-type WorkloadSpec struct {
-	ApiVersion string            `yaml:"apiVersion"`
-	Kind       string            `yaml:"kind"`
-	Metadata   Metadata          `yaml:"metadata"`
-	Data       map[string]string `yaml:"data"`
 }
 
 func DecodeWorkloadObjsYAML(fileLocation string) []WorkloadObject {
@@ -121,41 +97,84 @@ func GetWorkloadObjectsMap(workloadObjs []WorkloadObject, clientObjs []client.Ob
 	return workloadObjsMap
 }
 
-func DecodeWorkloadSpecsYAML(fileLocation string) []WorkloadObject {
+func replaceVars(cmString string, vars map[string]string, instanceNum, numInstances int, workloadName string, workloadConfigMap *corev1.ConfigMap) string {
+	for variable, value := range vars {
+		log.Println("Searching for var", "var", variable, "replacement", value)
+		cmString = strings.ReplaceAll(cmString, "{{"+variable+"}}", value)
+	}
+
+	// Use workload spec's annotations as default values for any remaining variables
+	for k, v := range workloadConfigMap.ObjectMeta.Annotations {
+		s := strings.SplitN(k, ".", 3)
+		if len(s) == 3 && s[0] == "cnsbench" && s[1] == "default" {
+			log.Println("Searching for var", "var", s[2], "default replacement", v)
+			cmString = strings.ReplaceAll(cmString, "{{"+s[2]+"}}", v)
+		}
+	}
+	cmString = strings.ReplaceAll(cmString, "{{ACTION_NAME}}", workloadName)
+	cmString = strings.ReplaceAll(cmString, "{{ACTION_NAME_CAPS}}", strings.ToUpper(workloadName))
+	cmString = strings.ReplaceAll(cmString, "{{INSTANCE_NUM}}", strconv.Itoa(instanceNum))
+	cmString = strings.ReplaceAll(cmString, "{{NUM_INSTANCES}}", strconv.Itoa(numInstances))
+
+	if strings.Contains(cmString, "{{") {
+		log.Println("Object definition contains double curly brackets ({{), possible unset variable", "cmstring", cmString)
+	}
+
+	return cmString
+}
+
+func DecodeWorkloadSpecsYAML(fileLocation string, vars map[string]string) []WorkloadObject {
 	yamlData, err := ioutil.ReadFile(fileLocation)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	workload := WorkloadSpec{}
-	err = yaml.Unmarshal(yamlData, &workload)
+	decode := scheme.Codecs.UniversalDeserializer().Decode
+	Obj, _, err := decode([]byte(yamlData), nil, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
+	configMap := Obj.(*corev1.ConfigMap)
 
 	workloadObjs := make([]WorkloadObject, 0)
-	for _, yamlString := range workload.Data {
-		workloadSpecObj := WorkloadSpecObject{}
-		err = yaml.Unmarshal([]byte(yamlString), &workloadSpecObj)
+	for k := range configMap.Data {
+		yamlString := replaceVars(configMap.Data[k], vars, 0, 0, "fio", configMap)
+		rtObj, _, err := decode([]byte(yamlString), nil, nil)
 		if err != nil {
 			log.Fatal(err)
 		}
-		workloadObj := CreateWorkloadObject()
-		workloadObj.ApiVersion = workloadSpecObj.ApiVersion
-		workloadObj.Kind = workloadSpecObj.Kind
-		workloadObj.Name = workloadSpecObj.Metadata.Name
-		if workloadSpecObj.Metadata.Annotations.Role != "volume" && workloadSpecObj.Metadata.Annotations.Role != "workload" {
-			workloadObj.Role = "helper"
-		} else {
-			workloadObj.Role = workloadSpecObj.Metadata.Annotations.Role
+
+		annotations, err := meta.NewAccessor().Annotations(rtObj)
+		if err != nil {
+			log.Fatal(err)
 		}
-		workloadObj.Sync, _ = strconv.ParseBool(workloadSpecObj.Metadata.Annotations.Sync)
-		workloadObj.Duplicate, _ = strconv.ParseBool(workloadSpecObj.Metadata.Annotations.Duplicate)
-		if workloadSpecObj.Metadata.Annotations.OutputFile != "" {
+
+		workloadObj := CreateWorkloadObject()
+		workloadObj.ApiVersion = rtObj.GetObjectKind().GroupVersionKind().Group + rtObj.GetObjectKind().GroupVersionKind().Version
+		workloadObj.Kind = rtObj.GetObjectKind().GroupVersionKind().Kind
+		workloadObj.Name = annotations["name"]
+		if _, ok := annotations["role"]; ok {
+			if annotations["role"] == "volume" || annotations["role"] == "workload" {
+				workloadObj.Role = annotations["role"]
+			}
+		}
+		if _, ok := annotations["sync"]; ok {
+			sync, err := strconv.ParseBool(annotations["sync"])
+			if err == nil {
+				workloadObj.Sync = sync
+			}
+		}
+		if _, ok := annotations["duplicate"]; ok {
+			duplicate, err := strconv.ParseBool(annotations["duplicate"])
+			if err == nil {
+				workloadObj.Duplicate = duplicate
+			}
+		}
+		if _, ok := annotations["outputFile"]; ok {
 			workloadObj.Outputs = make([]Output, 1)
-			workloadObj.Outputs[0].File = workloadSpecObj.Metadata.Annotations.OutputFile
-			if workloadSpecObj.Metadata.Annotations.Parser != "" {
-				workloadObj.Outputs[0].Parser = workloadSpecObj.Metadata.Annotations.Parser
+			workloadObj.Outputs[0].File = annotations["outputFile"]
+			if _, ok := annotations["parser"]; ok {
+				workloadObj.Outputs[0].Parser = annotations["parser"]
 			} else {
 				workloadObj.Outputs[0].Parser = "null-parser"
 			}

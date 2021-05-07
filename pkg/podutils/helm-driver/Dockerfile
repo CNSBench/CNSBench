@@ -1,7 +1,7 @@
 FROM golang:1.15 as build-env
 
-WORKDIR /go/src/helm
-ADD . /go/src/helm
+WORKDIR /go/src/helm-driver
+ADD . /go/src/helm-driver
 
 RUN go get -d -v ./...
 
