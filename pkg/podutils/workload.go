@@ -1,18 +1,27 @@
 package podutils
 
 import (
+	"context"
+	"fmt"
 	"io/ioutil"
 	"log"
+	"path"
 	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apiserver/pkg/storage/names"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
+
+var cl client.Client
 
 type Output struct {
 	File   string `yaml:"file"`
@@ -31,6 +40,12 @@ type WorkloadObject struct {
 
 type WorkloadObjectsArray struct {
 	WorkloadObjects []WorkloadObject `yaml:"workloadObjects"`
+}
+
+type WorkloadConfigMapNames struct {
+	ReadyScript      string
+	CountdoneScript  string
+	ParserConfigMaps map[string]string
 }
 
 func DecodeWorkloadObjsYAML(fileLocation string) []WorkloadObject {
@@ -183,4 +198,122 @@ func DecodeWorkloadSpecsYAML(fileLocation string, vars map[string]string) []Work
 	}
 
 	return workloadObjs
+}
+
+func loadScript(scriptName string) (string, error) {
+	if b, err := ioutil.ReadFile(path.Join("/scripts/", scriptName)); err != nil {
+		return "", err
+	} else {
+		return string(b), nil
+	}
+}
+
+func createObj(obj client.Object) error {
+	name, _ := meta.NewAccessor().Name(obj)
+
+	for _, x := range scheme.Codecs.SupportedMediaTypes() {
+		if x.MediaType == "application/yaml" {
+			ptBytes, err := runtime.Encode(x.Serializer, obj)
+			if err != nil {
+				log.Println(err, "Error encoding spec")
+			}
+			fmt.Println(string(ptBytes))
+		}
+	}
+
+	if err := cl.Create(context.TODO(), obj); err != nil {
+		if errors.IsAlreadyExists(err) {
+			log.Println("Object already exists, proceeding", "name", name)
+		} else {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func createTmpConfigMapFromDisk(scriptName string) (string, error) {
+	script, err := loadScript(scriptName)
+	if err != nil {
+		log.Println(err, "Error creating tmp configmap", "script", scriptName)
+		return "", err
+	}
+
+	newCm := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      names.NameGenerator.GenerateName(names.SimpleNameGenerator, "helper-"),
+			Namespace: "default",
+		},
+		Data: map[string]string{
+			scriptName: script,
+		},
+	}
+
+	if err := createObj(client.Object(&newCm)); err != nil {
+		log.Println(err, "Creating temp ConfigMap for", scriptName)
+	}
+
+	return newCm.ObjectMeta.Name, err
+}
+
+func cloneParser(parserName string) (string, error) {
+	parserCm := &corev1.ConfigMap{}
+
+	newCm := corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      names.NameGenerator.GenerateName(names.SimpleNameGenerator, parserName+"-"),
+			Namespace: "default",
+		},
+		Data: make(map[string]string),
+	}
+	for k, v := range parserCm.Data {
+		newCm.Data[k] = v
+	}
+
+	var err error
+	if err = createObj(client.Object(&newCm)); err != nil {
+		log.Println(err, "Creating temp ConfigMap")
+	}
+
+	return newCm.ObjectMeta.Name, err
+}
+
+func WorkloadConfigMapNamesBuilder(workloadObjs []WorkloadObject) WorkloadConfigMapNames {
+	workloadCMNames := WorkloadConfigMapNames{}
+	workloadCMNames.ParserConfigMaps = make(map[string]string)
+
+	for i := range workloadObjs {
+		if workloadObjs[i].Sync && workloadCMNames.ReadyScript == "" {
+			name, err := createTmpConfigMapFromDisk("ready.sh")
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			workloadCMNames.ReadyScript = name
+		}
+
+		if len(workloadObjs[i].Outputs) > 0 {
+			if workloadCMNames.CountdoneScript == "" {
+				name, err := createTmpConfigMapFromDisk("countdone.sh")
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				workloadCMNames.CountdoneScript = name
+			}
+
+			for _, output := range workloadObjs[i].Outputs {
+				if _, ok := workloadCMNames.ParserConfigMaps[output.Parser]; !ok {
+					name, err := cloneParser(output.Parser)
+					if err != nil {
+						log.Fatal(err)
+					}
+
+					workloadCMNames.ParserConfigMaps[output.Parser] = name
+				}
+			}
+		}
+	}
+
+	return workloadCMNames
 }
