@@ -5,9 +5,6 @@ go 1.16
 require (
 	github.com/cnsbench/cnsbench v0.0.0-20210429123313-9d14ce66defb
 	helm.sh/helm/v3 v3.5.4
-	k8s.io/apimachinery v0.20.5
-	k8s.io/client-go v0.20.5
-	sigs.k8s.io/controller-runtime v0.8.3
 )
 
 replace (

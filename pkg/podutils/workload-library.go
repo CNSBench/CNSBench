@@ -74,7 +74,7 @@ func DecodeWorkloadObjsYAML(fileLocation string) []WorkloadObject {
 	return workloadObjsArray.WorkloadObjects
 }
 
-func CreateWorkloadObject() WorkloadObject {
+func createWorkloadObject() WorkloadObject {
 	return WorkloadObject{
 		Role:      "helper",
 		Duplicate: false,
@@ -82,7 +82,7 @@ func CreateWorkloadObject() WorkloadObject {
 	}
 }
 
-func SearchWorkloadObjects(workloadObjs []WorkloadObject, name string, objKind schema.ObjectKind) int {
+func searchWorkloadObjects(workloadObjs []WorkloadObject, name string, objKind schema.ObjectKind) int {
 	for index, workloadObj := range workloadObjs {
 		if workloadObj.Name == name && workloadObj.Kind == objKind.GroupVersionKind().Kind && workloadObj.ApiVersion == (objKind.GroupVersionKind().Group+objKind.GroupVersionKind().Version) {
 			return index
@@ -96,9 +96,9 @@ func GetWorkloadObjectsMap(workloadObjs []WorkloadObject, clientObjs []client.Ob
 	workloadObjsMap := make(map[string]WorkloadObject)
 	for _, clientObj := range clientObjs {
 		objKind := clientObj.GetObjectKind()
-		index := SearchWorkloadObjects(workloadObjs, clientObj.GetName(), clientObj.GetObjectKind())
+		index := searchWorkloadObjects(workloadObjs, clientObj.GetName(), clientObj.GetObjectKind())
 		if index < 0 {
-			workloadObj = CreateWorkloadObject()
+			workloadObj = createWorkloadObject()
 			workloadObj.Name = clientObj.GetName()
 			workloadObj.Kind = objKind.GroupVersionKind().Kind
 			workloadObj.ApiVersion = (objKind.GroupVersionKind().Group + objKind.GroupVersionKind().Version)
@@ -138,23 +138,13 @@ func replaceVars(cmString string, vars map[string]string, instanceNum, numInstan
 	return cmString
 }
 
-func DecodeWorkloadSpecsYAML(fileLocation string, vars map[string]string) []WorkloadObject {
-	yamlData, err := ioutil.ReadFile(fileLocation)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func DecodeWorkloadLibrarySpec(cm *corev1.ConfigMap) []WorkloadObject {
 	decode := scheme.Codecs.UniversalDeserializer().Decode
-	Obj, _, err := decode([]byte(yamlData), nil, nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	configMap := Obj.(*corev1.ConfigMap)
 
 	workloadObjs := make([]WorkloadObject, 0)
-	for k := range configMap.Data {
-		yamlString := replaceVars(configMap.Data[k], vars, 0, 0, "fio", configMap)
-		rtObj, _, err := decode([]byte(yamlString), nil, nil)
+	for k := range cm.Data {
+		objYaml := replaceVars(cm.Data[k], vars, 0, 0, "fio", cm)
+		rtObj, _, err := decode([]byte(objYaml), nil, nil)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -164,7 +154,7 @@ func DecodeWorkloadSpecsYAML(fileLocation string, vars map[string]string) []Work
 			log.Fatal(err)
 		}
 
-		workloadObj := CreateWorkloadObject()
+		workloadObj := createWorkloadObject()
 		workloadObj.ApiVersion = rtObj.GetObjectKind().GroupVersionKind().Group + rtObj.GetObjectKind().GroupVersionKind().Version
 		workloadObj.Kind = rtObj.GetObjectKind().GroupVersionKind().Kind
 		workloadObj.Name = annotations["name"]
@@ -316,4 +306,33 @@ func WorkloadConfigMapNamesBuilder(workloadObjs []WorkloadObject) WorkloadConfig
 	}
 
 	return workloadCMNames
+}
+
+func WorkloadCMLookUp(workloadName string) *corev1.ConfigMap {
+	cm := &corev1.ConfigMap{}
+	err := cl.Get(context.TODO(), client.ObjectKey{
+		Namespace: "workload-library",
+		Name:      workloadName,
+	}, cm)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return cm
+}
+
+func LoadConfigMap(filename string) *corev1.ConfigMap {
+	cmYaml, err := ioutil.ReadFile(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	decode := scheme.Codecs.UniversalDeserializer().Decode
+	Obj, _, err := decode([]byte(cmYaml), nil, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	cm := Obj.(*corev1.ConfigMap)
+
+	return cm
 }
