@@ -1,8 +1,8 @@
 package controllers
 
 import (
-  "fmt"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"path"
 	"strconv"
@@ -362,24 +362,62 @@ func (r *BenchmarkReconciler) addPodWatcherToken(obj client.Object) (client.Obje
 
 //////////////////////////////////////////////////////////
 
-func PrependWorkloadContainerCmd(obj client.Object) (client.Object, error) {
+func PrependWorkloadContainerCmd(obj client.Object, cmds []string) (client.Object, error) {
 	// get PodSpec
 	spec, err := podutils.PodSpec(obj)
 	if err != nil {
-		fmt.Println(err, "podSpec")
+		fmt.Println("Error getting podspec", err)
 		return nil, err
 	}
 
 	// iterate through containers and update command
 	for i, container := range spec.Containers {
+		if strings.Contains(container.Name, "parser") {
+			continue
+		}
+
+		// Get command and remove "/bin/sh -c" from beginning
+		// replace with our own in prepended command
 		script := []string{"/bin/sh", "-c"}
-		cmds := []string{"ln -s /output /var/workload;"}
-		// Get command and remove "/bin/sh -c from beginning"
 		cmd := strings.Join(container.Command, " ")
 		strippedCmd := strings.Split(cmd, "sh -c")
+
 		// Prepend command and update command in container
 		cmds = append(cmds, strippedCmd[len(strippedCmd)-1])
 		finalCmd := strings.Join(cmds, " ")
+		script = append(script, finalCmd)
+		spec.Containers[i].Command = script
+	}
+
+	return podutils.UpdatePodSpec(obj, *spec)
+}
+
+func AppendWorkloadContainerCmd(obj client.Object, cmds []string) (client.Object, error) {
+	// get PodSpec
+	spec, err := podutils.PodSpec(obj)
+	if err != nil {
+		fmt.Println("Error getting podspec", err)
+		return nil, err
+	}
+
+	// iterate through containers and update command
+	for i, container := range spec.Containers {
+		if strings.Contains(container.Name, "parser") {
+			continue
+		}
+
+		// Get command and remove "/bin/sh -c" from beginning, if present
+		// We need to add our own later
+		script := []string{"/bin/sh", "-c"}
+		cmd := strings.Join(container.Command, " ")
+		if !strings.HasSuffix(cmd, ";") {
+			cmd += ";"
+		}
+		strippedCmd := strings.Split(cmd, "sh -c")
+
+		// Append command and update command in container
+		finalCmds := append([]string{strippedCmd[len(strippedCmd)-1]}, cmds...)
+		finalCmd := strings.Join(finalCmds, " ")
 		script = append(script, finalCmd)
 		spec.Containers[i].Command = script
 	}
@@ -558,11 +596,11 @@ func (r *BenchmarkReconciler) prepareAndRun(bm *cnsbench.Benchmark, w int, workl
 	}
 
 	// Prepare worload container commands, if pod spec present
-	if r.getRole(objAnnotations) == "workload" {
-		if obj, err = PrependWorkloadContainerCmd(obj); err != nil {
-			return err
-		}
-	}
+//	if r.getRole(objAnnotations) == "workload" {
+//		if obj, err = PrependWorkloadContainerCmd(obj); err != nil {
+//			return err
+//		}
+//	}
 
 	// Add containers for parsing and outputting
 	if obj, err = r.addContainers(bm, obj, objAnnotations, a); err != nil {
