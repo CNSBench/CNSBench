@@ -15,13 +15,13 @@ import (
 )
 
 func main() {
-	/* Check args */
+	// Check args
 	if len(os.Args) < 3 {
 		fmt.Println("Usage: go run cmd-append.go <config file> <pod file>\n")
 		os.Exit(0)
 	}
 
-	/* Setup pod based on config file */
+	// Setup pod based on config file
 	objBytes, err := ioutil.ReadFile(os.Args[1])
 	if err != nil {
 		fmt.Printf("Error reading file contents", err)
@@ -43,7 +43,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	/* Copy pod file log to /output */
+	// Copy pod file log to /output
 	dirpath := filepath.Dir(os.Args[2])
 	cmd := fmt.Sprintf("cp %s /output%s;", os.Args[2], os.Args[2])
 	if strings.Compare(dirpath, ".") != 0 {
@@ -54,7 +54,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	/* Create/run the pod */
+	// Create/run the pod
 	err = cl.Create(context.TODO(), obj)
 	if err != nil {
 		fmt.Println("Failed creating object", err)
